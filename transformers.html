@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Interactive Worksheet — Transformers</title>
+<style>
+  :root {
+    --bg: #f4f7fb;
+    --card: #ffffff;
+    --ink: #1c2733;
+    --muted: #5a6b80;
+    --accent: #2563eb;
+    --accent-2: #16a34a;
+    --warn: #d97706;
+    --danger: #dc2626;
+    --border: #d8e1ec;
+    --good: #dcfce7;
+    --bad: #fee2e2;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.55;
+  }
+  header {
+    background: linear-gradient(135deg, #1e3a8a, #2563eb);
+    color: white;
+    padding: 28px 24px;
+    text-align: center;
+  }
+  header h1 { margin: 0 0 6px 0; font-size: 28px; }
+  header p { margin: 0; opacity: 0.9; }
+  main {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 24px 16px 80px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 22px 22px 18px;
+    margin: 18px 0;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+  .card h2 {
+    margin: 0 0 6px 0;
+    color: var(--accent);
+    font-size: 20px;
+  }
+  .card .subtitle {
+    margin: 0 0 14px 0;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .objectives {
+    background: #eff6ff;
+    border-left: 4px solid var(--accent);
+    padding: 12px 16px;
+    border-radius: 6px;
+  }
+  .objectives ul { margin: 8px 0 0 18px; padding: 0; }
+  .info-box {
+    background: #fef3c7;
+    border-left: 4px solid var(--warn);
+    padding: 12px 16px;
+    border-radius: 6px;
+    margin: 10px 0;
+  }
+  .step-list { padding-left: 22px; }
+  .step-list li { margin: 4px 0; }
+  label.qlabel {
+    display: block;
+    margin: 14px 0 6px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  textarea, input[type="text"] {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+    background: #fbfcfe;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    resize: vertical;
+  }
+  textarea { min-height: 60px; }
+  textarea:focus, input[type="text"]:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  }
+  .blank {
+    display: inline-block;
+    min-width: 160px;
+  }
+  .blank input {
+    padding: 4px 8px;
+    border: none;
+    border-bottom: 2px solid var(--accent);
+    background: transparent;
+    font-size: 14px;
+    width: 100%;
+  }
+  .blank input:focus { outline: none; background: #eff6ff; }
+
+  .controls {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+    background: #f1f5f9;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    margin: 12px 0;
+  }
+  .controls label {
+    font-size: 13px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .controls input[type="range"] { width: 140px; }
+  .btn {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 14px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background 0.15s;
+  }
+  .btn:hover { background: #1d4ed8; }
+  .btn.secondary { background: #475569; }
+  .btn.secondary:hover { background: #334155; }
+  .btn.toggle.on { background: var(--accent-2); }
+  .btn.toggle.off { background: #94a3b8; }
+
+  .sim-wrap {
+    background: #0f172a;
+    border-radius: 10px;
+    padding: 12px;
+    text-align: center;
+    margin: 12px 0;
+  }
+  canvas {
+    background: #0f172a;
+    border-radius: 6px;
+    width: 100%;
+    height: auto;
+    max-width: 720px;
+    display: block;
+    margin: 0 auto;
+  }
+  .readout {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    flex-wrap: wrap;
+    color: #e2e8f0;
+    font-family: monospace;
+    font-size: 14px;
+    margin-top: 10px;
+  }
+  .readout span b { color: #fde047; }
+
+  .check-pair {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+  }
+  .check-pair button {
+    flex: 1;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .check-pair button.selected.right { background: var(--good); border-color: var(--accent-2); }
+  .check-pair button.selected.wrong { background: var(--bad); border-color: var(--danger); }
+
+  .feedback {
+    font-size: 13px;
+    margin-top: 6px;
+    color: var(--muted);
+    min-height: 18px;
+  }
+  .feedback.good { color: var(--accent-2); font-weight: 600; }
+  .feedback.bad { color: var(--danger); font-weight: 600; }
+
+  .progress-bar {
+    position: sticky;
+    top: 0;
+    background: white;
+    border-bottom: 1px solid var(--border);
+    z-index: 50;
+    padding: 8px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .progress-bar .bar {
+    flex: 1;
+    height: 8px;
+    background: #e2e8f0;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .progress-bar .fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    width: 0%;
+    transition: width 0.3s;
+  }
+  .progress-bar span { font-size: 13px; color: var(--muted); }
+
+  .row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .row > * { flex: 1 1 280px; }
+
+  .actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin: 24px 0 0;
+  }
+
+  details summary {
+    cursor: pointer;
+    color: var(--accent);
+    font-weight: 600;
+    margin-top: 6px;
+  }
+  details p { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
+
+  @media print {
+    .progress-bar, .controls, .actions, .btn, .sim-wrap { display: none !important; }
+    .card { break-inside: avoid; box-shadow: none; }
+    body { background: white; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Transformers — Interactive Worksheet</h1>
+  <p>A transformer is a device used to change the size of an alternating voltage or current.</p>
+</header>
+
+<div class="progress-bar">
+  <span>Progress</span>
+  <div class="bar"><div class="fill" id="progressFill"></div></div>
+  <span id="progressText">0 / 0</span>
+</div>
+
+<main>
+
+  <!-- LEARNING OBJECTIVES -->
+  <section class="card">
+    <h2>Learning Objectives</h2>
+    <p class="subtitle">By the end of this worksheet you will be able to:</p>
+    <div class="objectives">
+      <ul>
+        <li>Explain how a transformer works.</li>
+        <li>Describe how to increase or decrease output voltage.</li>
+      </ul>
+    </div>
+
+    <h2 style="margin-top:18px">Before You Start (Important!)</h2>
+    <div class="info-box">
+      A transformer has:
+      <ul style="margin: 6px 0 0 18px">
+        <li><b>Primary coil</b> &rarr; connected to the power source</li>
+        <li><b>Secondary coil</b> &rarr; where output voltage appears</li>
+        <li><b>No direct connection</b> between the coils!</li>
+      </ul>
+    </div>
+
+    <label class="qlabel">Your name</label>
+    <input type="text" id="studentName" placeholder="Type your name here" />
+    <label class="qlabel">Date</label>
+    <input type="text" id="studentDate" placeholder="DD / MM / YYYY" />
+  </section>
+
+  <!-- PART 1 -->
+  <section class="card">
+    <h2>Part 1 — Getting Familiar with the Simulation</h2>
+    <p class="subtitle">Open <a href="https://phet.colorado.edu" target="_blank" rel="noopener">phet.colorado.edu</a>, search for &ldquo;Faraday&rsquo;s Electromagnetic Lab&rdquo;, open it, and select the <b>Transformer</b> tab.</p>
+    <ol class="step-list">
+      <li>Turn ON &ldquo;Show magnetic field&rdquo;.</li>
+      <li>Turn ON &ldquo;Show electrons&rdquo;.</li>
+      <li>Click &ldquo;AC power supply&rdquo;.</li>
+    </ol>
+
+    <p class="subtitle" style="margin-top:14px">Use the simulation below as a backup if PhET is unavailable.</p>
+    <div class="sim-wrap">
+      <canvas id="sim" width="720" height="320"></canvas>
+      <div class="controls" style="margin-top:10px;">
+        <button class="btn toggle on" id="btnPower">Power: ON</button>
+        <button class="btn toggle on" id="btnMode">Source: AC</button>
+        <button class="btn toggle on" id="btnField">Magnetic field: ON</button>
+        <button class="btn toggle on" id="btnElectrons">Electrons: ON</button>
+        <label>Voltage <input type="range" id="ctrlVoltage" min="1" max="10" step="0.5" value="5" /><span id="vVal">5.0</span></label>
+        <label>Primary turns <input type="range" id="ctrlNp" min="2" max="20" step="1" value="10" /><span id="npVal">10</span></label>
+        <label>Secondary turns <input type="range" id="ctrlNs" min="2" max="20" step="1" value="10" /><span id="nsVal">10</span></label>
+      </div>
+      <div class="readout">
+        <span>V<sub>p</sub> = <b id="vp">5.0</b> V</span>
+        <span>V<sub>s</sub> = <b id="vs">5.0</b> V</span>
+        <span>Bulb: <b id="bulbState">on</b></span>
+      </div>
+    </div>
+
+    <label class="qlabel">1. What do you see moving in the wires?</label>
+    <textarea data-q="p1q1"></textarea>
+
+    <label class="qlabel">2. What appears around the coils? (look at the space between them)</label>
+    <textarea data-q="p1q2"></textarea>
+
+    <label class="qlabel">3. Is there a wire connecting the two coils?</label>
+    <div class="check-pair" data-mc="p1q3" data-correct="no">
+      <button data-val="yes">Yes</button>
+      <button data-val="no">No</button>
+    </div>
+    <div class="feedback" data-fb="p1q3"></div>
+
+    <label class="qlabel">Complete the sentence: Energy moves from the primary to the secondary by
+      <span class="blank"><input type="text" data-q="p1q4" placeholder="..." /></span>.
+    </label>
+    <details><summary>Hint</summary><p>Think about the invisible thing that grows and shrinks around the coils.</p></details>
+  </section>
+
+  <!-- PART 2 -->
+  <section class="card">
+    <h2>Part 2 — What is happening in the first coil?</h2>
+    <ol class="step-list">
+      <li>Focus only on the primary coil (left side).</li>
+      <li>Watch the electrons and magnetic field.</li>
+    </ol>
+
+    <label class="qlabel">1. Are the electrons moving in one direction or changing direction?</label>
+    <div class="check-pair" data-mc="p2q1" data-correct="changing">
+      <button data-val="one">One direction</button>
+      <button data-val="changing">Changing direction (back and forth)</button>
+    </div>
+    <div class="feedback" data-fb="p2q1"></div>
+
+    <label class="qlabel">2. What happens to the magnetic field?</label>
+    <div class="check-pair" data-mc="p2q2" data-correct="changing">
+      <button data-val="constant">Stays constant</button>
+      <button data-val="changing">It changes (grows and shrinks)</button>
+    </div>
+    <div class="feedback" data-fb="p2q2"></div>
+
+    <label class="qlabel">Conclusion sentence: When current changes, the magnetic field
+      <span class="blank"><input type="text" data-q="p2q3" placeholder="..." /></span>.
+    </label>
+  </section>
+
+  <!-- PART 3 -->
+  <section class="card">
+    <h2>Part 3 — What happens in the second coil?</h2>
+    <ol class="step-list">
+      <li>Now look at the secondary coil (right side).</li>
+      <li>Watch carefully when the magnetic field changes.</li>
+    </ol>
+
+    <label class="qlabel">1. When the magnetic field changes, what happens to the electrons in the second coil?</label>
+    <textarea data-q="p3q1"></textarea>
+
+    <label class="qlabel">2. Does current appear even without a wire connection?</label>
+    <div class="check-pair" data-mc="p3q2" data-correct="yes">
+      <button data-val="yes">Yes</button>
+      <button data-val="no">No</button>
+    </div>
+    <div class="feedback" data-fb="p3q2"></div>
+
+    <label class="qlabel">3. When does the current become strongest?</label>
+    <textarea data-q="p3q3" placeholder="Tip: think about how fast the magnetic field is changing..."></textarea>
+  </section>
+
+  <!-- PART 4 -->
+  <section class="card">
+    <h2>Part 4 — Test DC vs AC <span style="color: var(--danger)">(Very Important!)</span></h2>
+    <ol class="step-list">
+      <li>Switch from AC &rarr; DC (use the &ldquo;Source&rdquo; button on the simulation above).</li>
+      <li>Observe what happens.</li>
+    </ol>
+
+    <label class="qlabel">1. Do electrons in the primary coil still move?</label>
+    <div class="check-pair" data-mc="p4q1" data-correct="steady">
+      <button data-val="back">Yes, back and forth</button>
+      <button data-val="steady">Yes, but in one steady direction</button>
+      <button data-val="stop">No, they stop</button>
+    </div>
+    <div class="feedback" data-fb="p4q1"></div>
+
+    <label class="qlabel">2. Does the magnetic field change or stay constant?</label>
+    <div class="check-pair" data-mc="p4q2" data-correct="constant">
+      <button data-val="changing">Changes</button>
+      <button data-val="constant">Stays constant</button>
+    </div>
+    <div class="feedback" data-fb="p4q2"></div>
+
+    <label class="qlabel">3. Is there current in the secondary coil?</label>
+    <div class="check-pair" data-mc="p4q3" data-correct="no">
+      <button data-val="yes">Yes</button>
+      <button data-val="no">No</button>
+    </div>
+    <div class="feedback" data-fb="p4q3"></div>
+
+    <p class="subtitle" style="margin-top:14px">Now switch back to AC.</p>
+    <label class="qlabel">What changes?</label>
+    <textarea data-q="p4q4"></textarea>
+
+    <label class="qlabel">Think and answer: Why do transformers use AC instead of DC?</label>
+    <textarea data-q="p4q5" placeholder="Use the words: changing magnetic field, induced current..."></textarea>
+  </section>
+
+  <!-- PART 5 -->
+  <section class="card">
+    <h2>Part 5 — Changing Number of Turns</h2>
+    <ol class="step-list">
+      <li>Keep the primary coil turns the same.</li>
+      <li>Change secondary coil turns: try 5 &rarr; 10 &rarr; 20 loops.</li>
+    </ol>
+
+    <label class="qlabel">1. What happens to the brightness (or voltage) when you increase loops?</label>
+    <textarea data-q="p5q1"></textarea>
+
+    <label class="qlabel">2. What happens when you decrease loops?</label>
+    <textarea data-q="p5q2"></textarea>
+
+    <label class="qlabel">3. Complete:</label>
+    More loops in secondary &rarr;
+    <span class="blank"><input type="text" data-q="p5q3a" placeholder="higher / lower" /></span> voltage<br />
+    Fewer loops in secondary &rarr;
+    <span class="blank"><input type="text" data-q="p5q3b" placeholder="higher / lower" /></span> voltage
+  </section>
+
+  <!-- PART 6 -->
+  <section class="card">
+    <h2>Part 6 — Changing Input Voltage</h2>
+    <ol class="step-list">
+      <li>Increase the voltage of the AC source.</li>
+      <li>Observe the output.</li>
+    </ol>
+
+    <label class="qlabel">1. What happens to the output when input increases?</label>
+    <textarea data-q="p6q1"></textarea>
+
+    <label class="qlabel">2. Is the change small or large?</label>
+    <div class="check-pair" data-mc="p6q2" data-correct="proportional">
+      <button data-val="small">Small / no change</button>
+      <button data-val="proportional">Output increases too (proportionally)</button>
+    </div>
+    <div class="feedback" data-fb="p6q2"></div>
+
+    <label class="qlabel">Complete: Higher input voltage &rarr;
+      <span class="blank"><input type="text" data-q="p6q3" placeholder="higher / lower" /></span> output voltage.
+    </label>
+  </section>
+
+  <!-- PART 7 -->
+  <section class="card">
+    <h2>Part 7 — Build Full Explanation</h2>
+
+    <label class="qlabel">1. How does a transformer transfer energy without wires?</label>
+    <textarea data-q="p7q1" style="min-height:90px"></textarea>
+
+    <label class="qlabel">2. Complete the explanation:</label>
+    AC current in the primary coil creates a
+    <span class="blank"><input type="text" data-q="p7q2a" placeholder="..." /></span> magnetic field.<br />
+    This changing field induces
+    <span class="blank"><input type="text" data-q="p7q2b" placeholder="..." /></span> in the secondary coil.
+
+    <label class="qlabel">3. How do you make a step-up transformer?</label>
+    <textarea data-q="p7q3"></textarea>
+
+    <label class="qlabel">4. How do you make a step-down transformer?</label>
+    <textarea data-q="p7q4"></textarea>
+
+    <details>
+      <summary>Show the formula (when you&rsquo;re ready)</summary>
+      <p>V<sub>s</sub> / V<sub>p</sub> = N<sub>s</sub> / N<sub>p</sub> &nbsp; — output voltage depends on the ratio of turns.</p>
+    </details>
+  </section>
+
+  <div class="actions">
+    <button class="btn" id="btnSave">Save my answers</button>
+    <button class="btn secondary" id="btnPrint">Print / Save as PDF</button>
+    <button class="btn secondary" id="btnReset">Reset worksheet</button>
+  </div>
+
+</main>
+
+<script>
+/* ---------- Simulation ---------- */
+const cv = document.getElementById('sim');
+const ctx = cv.getContext('2d');
+
+const state = {
+  power: true,
+  ac: true,
+  showField: true,
+  showElectrons: true,
+  voltage: 5.0,
+  Np: 10,
+  Ns: 10,
+  t: 0,
+};
+
+function bind(id, key, render) {
+  const el = document.getElementById(id);
+  el.addEventListener('input', () => {
+    state[key] = parseFloat(el.value);
+    if (render) render();
+    updateReadout();
+  });
+}
+bind('ctrlVoltage', 'voltage', () => document.getElementById('vVal').textContent = state.voltage.toFixed(1));
+bind('ctrlNp', 'Np', () => document.getElementById('npVal').textContent = state.Np);
+bind('ctrlNs', 'Ns', () => document.getElementById('nsVal').textContent = state.Ns);
+
+function toggleBtn(id, key, labelOn, labelOff) {
+  const b = document.getElementById(id);
+  b.addEventListener('click', () => {
+    state[key] = !state[key];
+    b.classList.toggle('on', state[key]);
+    b.classList.toggle('off', !state[key]);
+    b.textContent = state[key] ? labelOn : labelOff;
+    updateReadout();
+  });
+}
+toggleBtn('btnPower', 'power', 'Power: ON', 'Power: OFF');
+toggleBtn('btnField', 'showField', 'Magnetic field: ON', 'Magnetic field: OFF');
+toggleBtn('btnElectrons', 'showElectrons', 'Electrons: ON', 'Electrons: OFF');
+const btnMode = document.getElementById('btnMode');
+btnMode.addEventListener('click', () => {
+  state.ac = !state.ac;
+  btnMode.textContent = state.ac ? 'Source: AC' : 'Source: DC';
+  btnMode.classList.toggle('on', state.ac);
+  btnMode.classList.toggle('off', !state.ac);
+  updateReadout();
+});
+
+function currentSignal() {
+  if (!state.power) return 0;
+  if (state.ac) return Math.sin(state.t * 2 * Math.PI * 0.6) * state.voltage;
+  return state.voltage;
+}
+
+function fieldSignal() {
+  return state.ac ? Math.sin(state.t * 2 * Math.PI * 0.6) : 1;
+}
+
+function fieldDerivative() {
+  return state.ac ? Math.cos(state.t * 2 * Math.PI * 0.6) * 2 * Math.PI * 0.6 : 0;
+}
+
+function drawCoil(x, cy, turns, color, electronPhase) {
+  const w = 14, h = 110;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 3;
+  for (let i = 0; i < turns; i++) {
+    const yy = cy - h/2 + (h / turns) * (i + 0.5);
+    ctx.beginPath();
+    ctx.ellipse(x, yy, w, (h / turns) / 2, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  // electrons
+  if (state.showElectrons && state.power) {
+    ctx.fillStyle = '#60a5fa';
+    for (let i = 0; i < turns; i++) {
+      const yy = cy - h/2 + (h / turns) * (i + 0.5);
+      const phase = electronPhase + i * 0.7;
+      const ang = phase;
+      const ex = x + Math.cos(ang) * w;
+      const ey = yy + Math.sin(ang) * (h / turns) / 2;
+      ctx.beginPath();
+      ctx.arc(ex, ey, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+function drawField(cx1, cx2, cy) {
+  if (!state.showField) return;
+  const f = fieldSignal();
+  if (Math.abs(f) < 0.02 && state.ac) return;
+  const strength = Math.abs(f);
+  const sign = f >= 0 ? 1 : -1;
+  ctx.strokeStyle = `rgba(250, 204, 21, ${0.25 + 0.6 * strength})`;
+  ctx.lineWidth = 1.5;
+  for (let r = 30; r < 260; r += 22) {
+    ctx.beginPath();
+    ctx.ellipse((cx1 + cx2) / 2, cy, r, r * 0.55, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  // arrows
+  ctx.fillStyle = `rgba(250, 204, 21, ${0.5 + 0.5 * strength})`;
+  for (let r = 50; r < 260; r += 60) {
+    const ax = (cx1 + cx2) / 2 + r;
+    ctx.beginPath();
+    if (sign > 0) {
+      ctx.moveTo(ax, cy - 8);
+      ctx.lineTo(ax + 8, cy);
+      ctx.lineTo(ax, cy + 8);
+    } else {
+      ctx.moveTo(ax + 8, cy - 8);
+      ctx.lineTo(ax, cy);
+      ctx.lineTo(ax + 8, cy + 8);
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+function drawBulb(x, cy, brightness) {
+  const r = 18;
+  const gradient = ctx.createRadialGradient(x, cy, 2, x, cy, r * 2.5);
+  gradient.addColorStop(0, `rgba(254, 240, 138, ${brightness})`);
+  gradient.addColorStop(1, 'rgba(254, 240, 138, 0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(x - r * 3, cy - r * 3, r * 6, r * 6);
+
+  ctx.beginPath();
+  ctx.arc(x, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(253, 224, 71, ${0.3 + brightness * 0.7})`;
+  ctx.fill();
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  ctx.fillStyle = '#cbd5e1';
+  ctx.fillRect(x - 8, cy + r, 16, 8);
+}
+
+function drawWires() {
+  ctx.strokeStyle = '#cbd5e1';
+  ctx.lineWidth = 2;
+  // primary wires to source
+  ctx.beginPath();
+  ctx.moveTo(170, 100);
+  ctx.lineTo(110, 100);
+  ctx.lineTo(110, 220);
+  ctx.lineTo(170, 220);
+  ctx.stroke();
+  // source box
+  ctx.fillStyle = '#1e293b';
+  ctx.fillRect(60, 130, 60, 60);
+  ctx.strokeStyle = '#94a3b8';
+  ctx.strokeRect(60, 130, 60, 60);
+  ctx.fillStyle = '#fde047';
+  ctx.font = '14px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(state.ac ? 'AC' : 'DC', 90, 165);
+
+  // secondary wires to bulb
+  ctx.strokeStyle = '#cbd5e1';
+  ctx.beginPath();
+  ctx.moveTo(550, 100);
+  ctx.lineTo(610, 100);
+  ctx.lineTo(610, 145);
+  ctx.moveTo(550, 220);
+  ctx.lineTo(610, 220);
+  ctx.lineTo(610, 175);
+  ctx.stroke();
+}
+
+let primaryPhase = 0, secondaryPhase = 0;
+
+function frame() {
+  state.t += 1/60;
+  const sig = currentSignal();
+  primaryPhase += (state.ac ? sig * 0.05 : (state.power ? state.voltage * 0.02 : 0));
+  const induced = state.ac ? fieldDerivative() * (state.Ns / state.Np) * state.voltage / 5 : 0;
+  secondaryPhase += induced * 0.05;
+
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  // iron core
+  ctx.fillStyle = '#334155';
+  ctx.fillRect(220, 80, 280, 160);
+  ctx.strokeStyle = '#64748b';
+  ctx.strokeRect(220, 80, 280, 160);
+  ctx.clearRect(250, 110, 220, 100);
+
+  drawField(260, 460, 160);
+  drawCoil(260, 160, state.Np, '#fb923c', primaryPhase);
+  drawCoil(460, 160, state.Ns, '#22c55e', secondaryPhase);
+  drawWires();
+
+  const Vs = state.ac && state.power ? state.voltage * (state.Ns / state.Np) : 0;
+  const brightness = Math.min(1, Math.abs(Vs) / 10);
+  drawBulb(610, 160, brightness);
+
+  // labels
+  ctx.fillStyle = '#fb923c';
+  ctx.font = 'bold 13px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('PRIMARY', 260, 280);
+  ctx.fillStyle = '#22c55e';
+  ctx.fillText('SECONDARY', 460, 280);
+
+  requestAnimationFrame(frame);
+}
+frame();
+
+function updateReadout() {
+  const Vs = state.ac && state.power ? (state.voltage * state.Ns / state.Np) : 0;
+  document.getElementById('vp').textContent = (state.power ? state.voltage : 0).toFixed(1);
+  document.getElementById('vs').textContent = Vs.toFixed(1);
+  document.getElementById('bulbState').textContent = Vs > 0.1 ? 'on' : 'off';
+}
+updateReadout();
+
+/* ---------- Form persistence + progress ---------- */
+const STORAGE_KEY = 'transformer-worksheet-v1';
+
+function saveAll() {
+  const data = { name: '', date: '', answers: {}, mc: {} };
+  data.name = document.getElementById('studentName').value;
+  data.date = document.getElementById('studentDate').value;
+  document.querySelectorAll('[data-q]').forEach(el => data.answers[el.dataset.q] = el.value);
+  document.querySelectorAll('[data-mc]').forEach(group => {
+    const sel = group.querySelector('button.selected');
+    if (sel) data.mc[group.dataset.mc] = sel.dataset.val;
+  });
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  updateProgress();
+}
+
+function loadAll() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) { updateProgress(); return; }
+  try {
+    const data = JSON.parse(raw);
+    if (data.name) document.getElementById('studentName').value = data.name;
+    if (data.date) document.getElementById('studentDate').value = data.date;
+    for (const k in data.answers) {
+      const el = document.querySelector(`[data-q="${k}"]`);
+      if (el) el.value = data.answers[k];
+    }
+    for (const k in data.mc) {
+      const group = document.querySelector(`[data-mc="${k}"]`);
+      if (!group) continue;
+      const btn = group.querySelector(`button[data-val="${data.mc[k]}"]`);
+      if (btn) selectMc(group, btn);
+    }
+  } catch (e) { console.warn('load failed', e); }
+  updateProgress();
+}
+
+function selectMc(group, btn) {
+  group.querySelectorAll('button').forEach(b => b.classList.remove('selected', 'right', 'wrong'));
+  btn.classList.add('selected');
+  const correct = group.dataset.correct;
+  const fb = document.querySelector(`[data-fb="${group.dataset.mc}"]`);
+  if (correct) {
+    if (btn.dataset.val === correct) {
+      btn.classList.add('right');
+      if (fb) { fb.textContent = 'Nice — that\'s correct.'; fb.className = 'feedback good'; }
+    } else {
+      btn.classList.add('wrong');
+      if (fb) { fb.textContent = 'Not quite — try the simulation again and watch carefully.'; fb.className = 'feedback bad'; }
+    }
+  }
+}
+
+document.querySelectorAll('[data-mc]').forEach(group => {
+  group.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => { selectMc(group, btn); saveAll(); });
+  });
+});
+
+document.querySelectorAll('[data-q], #studentName, #studentDate').forEach(el => {
+  el.addEventListener('input', saveAll);
+});
+
+function updateProgress() {
+  const textInputs = document.querySelectorAll('[data-q]');
+  const mcGroups = document.querySelectorAll('[data-mc]');
+  let total = textInputs.length + mcGroups.length;
+  let done = 0;
+  textInputs.forEach(el => { if (el.value.trim().length > 0) done++; });
+  mcGroups.forEach(g => { if (g.querySelector('button.selected')) done++; });
+  const pct = total ? (done / total) * 100 : 0;
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressText').textContent = `${done} / ${total}`;
+}
+
+document.getElementById('btnSave').addEventListener('click', () => {
+  saveAll();
+  const b = document.getElementById('btnSave');
+  const old = b.textContent; b.textContent = 'Saved ✓';
+  setTimeout(() => b.textContent = old, 1200);
+});
+document.getElementById('btnPrint').addEventListener('click', () => window.print());
+document.getElementById('btnReset').addEventListener('click', () => {
+  if (!confirm('Clear all your answers?')) return;
+  localStorage.removeItem(STORAGE_KEY);
+  document.querySelectorAll('[data-q]').forEach(el => el.value = '');
+  document.getElementById('studentName').value = '';
+  document.getElementById('studentDate').value = '';
+  document.querySelectorAll('[data-mc] button').forEach(b => b.classList.remove('selected', 'right', 'wrong'));
+  document.querySelectorAll('.feedback').forEach(f => { f.textContent = ''; f.className = 'feedback'; });
+  updateProgress();
+});
+
+loadAll();
+</script>
+
+</body>
+</html>
