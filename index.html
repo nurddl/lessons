@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Репетитор — ученики, занятия, оплаты</title>
+<style>
+:root{--bg:#f5f6fa;--card:#fff;--tx:#1d2233;--mut:#6b7285;--br:#e3e6ee;--pri:#4f46e5;--ok:#16a34a;--bad:#dc2626;--warn:#d97706}
+@media(prefers-color-scheme:dark){:root{--bg:#12141c;--card:#1b1e29;--tx:#e8eaf2;--mut:#98a0b5;--br:#2b3040;--pri:#818cf8;--ok:#4ade80;--bad:#f87171;--warn:#fbbf24}}
+*{box-sizing:border-box}
+body{margin:0;font:15px/1.45 system-ui,sans-serif;background:var(--bg);color:var(--tx)}
+header{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px solid var(--br)}
+.wrap{max-width:900px;margin:0 auto;padding:0 16px}
+nav{display:flex;gap:4px;overflow-x:auto}
+nav button{flex:1;background:none;border:0;border-bottom:3px solid transparent;padding:14px 8px;font:inherit;font-weight:600;color:var(--mut);cursor:pointer;white-space:nowrap}
+nav button.on{color:var(--pri);border-color:var(--pri)}
+main{padding:16px 0 80px}
+h2{margin:0 0 12px;font-size:20px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.sp{flex:1}
+.card{background:var(--card);border:1px solid var(--br);border-radius:12px;padding:12px 14px;margin-bottom:10px}
+.card .t{font-weight:600}
+.mut{color:var(--mut);font-size:13px}
+.btn{background:var(--pri);color:#fff;border:0;border-radius:8px;padding:9px 14px;font:inherit;font-weight:600;cursor:pointer}
+.btn.g{background:transparent;color:var(--pri);border:1px solid var(--br)}
+.btn.s{padding:5px 10px;font-size:13px}
+.btn.d{background:transparent;color:var(--bad);border:1px solid var(--br)}
+.pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600;background:var(--bg);border:1px solid var(--br)}
+.ok{color:var(--ok)}.bad{color:var(--bad)}.warn{color:var(--warn)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.stat{background:var(--card);border:1px solid var(--br);border-radius:12px;padding:12px}
+.stat b{display:block;font-size:22px;margin-top:2px}
+dialog{border:0;border-radius:14px;padding:20px;width:min(440px,94vw);background:var(--card);color:var(--tx)}
+dialog::backdrop{background:#0008}
+label{display:block;font-size:13px;color:var(--mut);margin:10px 0 3px}
+input,select,textarea{width:100%;padding:9px 10px;border:1px solid var(--br);border-radius:8px;font:inherit;background:var(--bg);color:var(--tx)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.day{font-weight:700;margin:18px 0 6px;color:var(--mut);text-transform:capitalize}
+.empty{text-align:center;color:var(--mut);padding:40px 0}
+select.flt{width:auto}
+</style>
+</head>
+<body>
+<header><div class="wrap"><nav id="nav">
+<button data-v="schedule">Расписание</button>
+<button data-v="students">Ученики</button>
+<button data-v="payments">Оплаты</button>
+</nav></div></header>
+<main class="wrap" id="app"></main>
+<dialog id="dlg"></dialog>
+
+<script>
+// ---------- хранилище ----------
+const KEY='tutor.v1';
+let db=load();
+function load(){try{const d=JSON.parse(localStorage.getItem(KEY));if(d&&d.students)return d}catch(e){}return{students:[],lessons:[],payments:[]}}
+function save(){localStorage.setItem(KEY,JSON.stringify(db))}
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const money=n=>new Intl.NumberFormat('ru-RU').format(Math.round(n))+' ₽';
+const today=()=>new Date().toLocaleDateString('sv');
+const stu=id=>db.students.find(s=>s.id===id);
+const fmtDate=d=>new Date(d+'T00:00').toLocaleDateString('ru-RU',{weekday:'long',day:'numeric',month:'long'});
+
+// Статусы: planned — запланировано, done — проведено (оплачивается),
+// missed — пропуск без предупреждения (оплачивается), cancelled — отмена (бесплатно)
+const ST={planned:'Запланировано',done:'Проведено',missed:'Пропуск (платный)',cancelled:'Отменено'};
+const charged=l=>l.status==='done'||l.status==='missed';
+
+function balance(sid){
+  const paid=db.payments.filter(p=>p.student===sid).reduce((a,p)=>a+p.amount,0);
+  const cost=db.lessons.filter(l=>l.student===sid&&charged(l)).reduce((a,l)=>a+l.price,0);
+  return paid-cost; // < 0 — долг ученика, > 0 — предоплата
+}
+const balTxt=b=>b<0?`<span class="bad">долг ${money(-b)}</span>`:b>0?`<span class="ok">предоплата ${money(b)}</span>`:`<span class="mut">всё оплачено</span>`;
+
+// ---------- навигация ----------
+let view='schedule',flt='upcoming',payFlt='';
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{view=b.dataset.v;render()});
+function render(){
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===view));
+  $('#app').innerHTML=({schedule:vSchedule,students:vStudents,payments:vPayments})[view]();
+}
+
+// ---------- расписание ----------
+function vSchedule(){
+  const t=today();
+  let ls=[...db.lessons];
+  if(flt==='upcoming')ls=ls.filter(l=>l.date>=t&&l.status==='planned');
+  else if(flt==='todo')ls=ls.filter(l=>l.date<=t&&l.status==='planned'); // нужно отметить
+  else if(flt==='past')ls=ls.filter(l=>l.status!=='planned');
+  ls.sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time)*(flt==='past'?-1:1));
+  const month=t.slice(0,7);
+  const mInc=db.payments.filter(p=>p.date.startsWith(month)).reduce((a,p)=>a+p.amount,0);
+  const mLes=db.lessons.filter(l=>l.date.startsWith(month)&&l.status==='done').length;
+  const debt=db.students.reduce((a,s)=>a+Math.max(0,-balance(s.id)),0);
+  let h=`<div class="stats">
+   <div class="stat"><span class="mut">Занятий в этом месяце</span><b>${mLes}</b></div>
+   <div class="stat"><span class="mut">Получено в этом месяце</span><b>${money(mInc)}</b></div>
+   <div class="stat"><span class="mut">Долги учеников</span><b class="${debt?'bad':''}">${money(debt)}</b></div></div>
+   <div class="row" style="margin-bottom:12px"><h2 style="margin:0">Занятия</h2><span class="sp"></span>
+   <select class="flt" onchange="flt=this.value;render()">
+     ${[['upcoming','Предстоящие'],['todo','Нужно отметить'],['past','Прошедшие'],['all','Все']].map(([v,n])=>`<option value="${v}" ${flt===v?'selected':''}>${n}</option>`).join('')}</select>
+   <button class="btn" onclick="lessonForm()">+ Занятие</button></div>`;
+  if(!ls.length)return h+`<div class="empty">${db.students.length?'Занятий нет':'Сначала добавьте ученика на вкладке «Ученики»'}</div>`;
+  let cur='';
+  for(const l of ls){
+    if(l.date!==cur){cur=l.date;h+=`<div class="day">${fmtDate(l.date)}${l.date===t?' · сегодня':''}</div>`}
+    const s=stu(l.student);
+    h+=`<div class="card"><div class="row"><div class="sp"><div class="t">${l.time} — ${esc(s?.name||'удалён')}</div>
+      <div class="mut">${l.dur} мин · ${money(l.price)}${l.subject?' · '+esc(l.subject):''}${l.note?' · '+esc(l.note):''}</div></div>
+      <span class="pill">${ST[l.status]}</span></div>
+      <div class="row" style="margin-top:8px">
+       ${l.status==='planned'?`<button class="btn s" onclick="setSt('${l.id}','done')">✓ Проведено</button>
+        <button class="btn g s" onclick="setSt('${l.id}','cancelled')">Отмена</button>
+        <button class="btn g s" onclick="setSt('${l.id}','missed')">Пропуск</button>`
+       :`<button class="btn g s" onclick="setSt('${l.id}','planned')">Вернуть в план</button>`}
+       <span class="sp"></span><button class="btn g s" onclick="lessonForm('${l.id}')">Изменить</button>
+       <button class="btn d s" onclick="delLesson('${l.id}')">×</button></div></div>`;
+  }
+  return h;
+}
+function setSt(id,st){db.lessons.find(l=>l.id===id).status=st;save();render()}
+function delLesson(id){if(confirm('Удалить занятие?')){db.lessons=db.lessons.filter(l=>l.id!==id);save();render()}}
+
+function lessonForm(id){
+  if(!db.students.length){alert('Сначала добавьте ученика');return}
+  const l=db.lessons.find(x=>x.id===id)||{student:db.students[0].id,date:today(),time:'16:00',dur:60,price:db.students[0].rate||0,subject:'',note:''};
+  openDlg(`<h2>${id?'Занятие':'Новое занятие'}</h2><form id="f">
+   <label>Ученик</label><select name="student" onchange="const s=stu(this.value);if(s)this.form.price.value=s.rate||0;this.form.dur.value=s.dur||60">
+     ${db.students.map(s=>`<option value="${s.id}" ${s.id===l.student?'selected':''}>${esc(s.name)}</option>`).join('')}</select>
+   <div class="two"><div><label>Дата</label><input type="date" name="date" value="${l.date}" required></div>
+   <div><label>Время</label><input type="time" name="time" value="${l.time}" required></div></div>
+   <div class="two"><div><label>Длительность, мин</label><input type="number" name="dur" min="5" step="5" value="${l.dur}" required></div>
+   <div><label>Стоимость, ₽</label><input type="number" name="price" min="0" value="${l.price}" required></div></div>
+   <label>Тема / предмет</label><input name="subject" value="${esc(l.subject)}">
+   <label>Заметка</label><input name="note" value="${esc(l.note)}">
+   ${id?'':`<label>Повторять еженедельно (всего занятий)</label><input type="number" name="rep" min="1" max="52" value="1">`}
+   <div class="row" style="margin-top:16px"><span class="sp"></span><button type="button" class="btn g" onclick="dlg.close()">Отмена</button><button class="btn">Сохранить</button></div></form>`);
+  $('#f').onsubmit=e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.target));
+    const base={student:f.student,time:f.time,dur:+f.dur,price:+f.price,subject:f.subject.trim(),note:f.note.trim()};
+    if(id)Object.assign(l,base,{date:f.date});
+    else{const n=Math.max(1,+f.rep||1);for(let i=0;i<n;i++){const d=new Date(f.date+'T00:00');d.setDate(d.getDate()+7*i);
+      db.lessons.push({id:uid(),...base,date:d.toLocaleDateString('sv'),status:'planned'})}}
+    save();dlg.close();render()};
+}
+
+// ---------- ученики ----------
+function vStudents(){
+  let h=`<div class="row" style="margin-bottom:12px"><h2 style="margin:0">Ученики</h2><span class="sp"></span><button class="btn" onclick="studentForm()">+ Ученик</button></div>`;
+  if(!db.students.length)return h+'<div class="empty">Пока нет учеников</div>';
+  for(const s of [...db.students].sort((a,b)=>a.name.localeCompare(b.name))){
+    const n=db.lessons.filter(l=>l.student===s.id&&l.status==='done').length;
+    const next=db.lessons.filter(l=>l.student===s.id&&l.status==='planned'&&l.date>=today()).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time))[0];
+    h+=`<div class="card"><div class="row"><div class="sp"><div class="t">${esc(s.name)}</div>
+      <div class="mut">${esc(s.contact||'')}${s.contact?' · ':''}${money(s.rate)} / ${s.dur||60} мин · проведено ${n}</div>
+      <div class="mut">${next?'Ближайшее: '+next.date.split('-').reverse().slice(0,2).join('.')+' '+next.time:'Занятий в плане нет'}</div>
+      ${s.note?`<div class="mut">📝 ${esc(s.note)}</div>`:''}</div>
+      <div style="text-align:right">${balTxt(balance(s.id))}</div></div>
+      <div class="row" style="margin-top:8px"><button class="btn s" onclick="payForm('${s.id}')">+ Оплата</button>
+      <button class="btn g s" onclick="lessonFormFor('${s.id}')">+ Занятие</button><span class="sp"></span>
+      <button class="btn g s" onclick="studentForm('${s.id}')">Изменить</button>
+      <button class="btn d s" onclick="delStudent('${s.id}')">×</button></div></div>`;
+  }
+  return h;
+}
+function lessonFormFor(sid){lessonForm();const f=$('#f');f.student.value=sid;f.student.onchange()}
+function studentForm(id){
+  const s=db.students.find(x=>x.id===id)||{name:'',contact:'',rate:1500,dur:60,note:''};
+  openDlg(`<h2>${id?'Ученик':'Новый ученик'}</h2><form id="f">
+   <label>Имя</label><input name="name" value="${esc(s.name)}" required>
+   <label>Контакты (телефон, Telegram, родители)</label><input name="contact" value="${esc(s.contact)}">
+   <div class="two"><div><label>Цена за занятие, ₽</label><input type="number" name="rate" min="0" value="${s.rate}" required></div>
+   <div><label>Длительность, мин</label><input type="number" name="dur" min="5" step="5" value="${s.dur}" required></div></div>
+   <label>Заметки (класс, цели, уровень)</label><textarea name="note" rows="3">${esc(s.note)}</textarea>
+   <div class="row" style="margin-top:16px"><span class="sp"></span><button type="button" class="btn g" onclick="dlg.close()">Отмена</button><button class="btn">Сохранить</button></div></form>`);
+  $('#f').onsubmit=e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.target));
+    const v={name:f.name.trim(),contact:f.contact.trim(),rate:+f.rate,dur:+f.dur,note:f.note.trim()};
+    if(id)Object.assign(s,v);else db.students.push({id:uid(),...v});
+    save();dlg.close();render()};
+}
+function delStudent(id){
+  if(!confirm('Удалить ученика вместе с его занятиями и оплатами?'))return;
+  db.students=db.students.filter(s=>s.id!==id);db.lessons=db.lessons.filter(l=>l.student!==id);db.payments=db.payments.filter(p=>p.student!==id);save();render()}
+
+// ---------- оплаты ----------
+function vPayments(){
+  let ps=db.payments.filter(p=>!payFlt||p.student===payFlt).sort((a,b)=>b.date.localeCompare(a.date));
+  const total=ps.reduce((a,p)=>a+p.amount,0);
+  let h=`<div class="row" style="margin-bottom:12px"><h2 style="margin:0">Оплаты</h2><span class="sp"></span>
+   <select class="flt" onchange="payFlt=this.value;render()"><option value="">Все ученики</option>
+   ${db.students.map(s=>`<option value="${s.id}" ${payFlt===s.id?'selected':''}>${esc(s.name)}</option>`).join('')}</select>
+   <button class="btn" onclick="payForm()">+ Оплата</button></div>`;
+  if(db.students.length){
+    h+=`<div class="card"><div class="t" style="margin-bottom:6px">Баланс по ученикам</div>`+
+    db.students.map(s=>`<div class="row"><span class="sp">${esc(s.name)}</span>${balTxt(balance(s.id))}</div>`).join('')+
+    `<div class="mut" style="margin-top:6px">Баланс = всё оплаченное − стоимость проведённых и платно пропущенных занятий.</div></div>`;
+  }
+  if(!ps.length)return h+'<div class="empty">Оплат пока нет</div>';
+  h+=`<div class="mut" style="margin:10px 0">Итого: <b>${money(total)}</b></div>`;
+  for(const p of ps){
+    h+=`<div class="card"><div class="row"><div class="sp"><div class="t">${esc(stu(p.student)?.name||'удалён')} — <span class="ok">${money(p.amount)}</span></div>
+     <div class="mut">${p.date.split('-').reverse().join('.')} · ${esc(p.method)}${p.note?' · '+esc(p.note):''}</div></div>
+     <button class="btn g s" onclick="payForm(null,'${p.id}')">Изменить</button>
+     <button class="btn d s" onclick="delPay('${p.id}')">×</button></div></div>`;
+  }
+  return h;
+}
+function delPay(id){if(confirm('Удалить оплату?')){db.payments=db.payments.filter(p=>p.id!==id);save();render()}}
+function payForm(sid,id){
+  if(!db.students.length){alert('Сначала добавьте ученика');return}
+  const sel=sid||db.students[0].id;
+  const p=db.payments.find(x=>x.id===id)||{student:sel,amount:Math.max(0,-balance(sel))||stu(sel).rate,date:today(),method:'Перевод',note:''};
+  openDlg(`<h2>${id?'Оплата':'Новая оплата'}</h2><form id="f">
+   <label>Ученик</label><select name="student" onchange="const b=balance(this.value);this.form.amount.value=b<0?-b:(stu(this.value).rate||0)">
+    ${db.students.map(s=>`<option value="${s.id}" ${s.id===p.student?'selected':''}>${esc(s.name)} (${balance(s.id)<0?'долг '+money(-balance(s.id)):'ок'})</option>`).join('')}</select>
+   <div class="two"><div><label>Сумма, ₽</label><input type="number" name="amount" min="1" value="${p.amount}" required></div>
+   <div><label>Дата</label><input type="date" name="date" value="${p.date}" required></div></div>
+   <label>Способ</label><select name="method">${['Перевод','Наличные','Карта','Другое'].map(m=>`<option ${m===p.method?'selected':''}>${m}</option>`).join('')}</select>
+   <label>Заметка</label><input name="note" value="${esc(p.note)}">
+   <div class="row" style="margin-top:16px"><span class="sp"></span><button type="button" class="btn g" onclick="dlg.close()">Отмена</button><button class="btn">Сохранить</button></div></form>`);
+  $('#f').onsubmit=e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.target));
+    const v={student:f.student,amount:+f.amount,date:f.date,method:f.method,note:f.note.trim()};
+    if(id)Object.assign(p,v);else db.payments.push({id:uid(),...v});
+    save();dlg.close();render()};
+}
+
+// ---------- резервная копия ----------
+function exportData(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(db,null,1)],{type:'application/json'}));a.download=`tutor-backup-${today()}.json`;a.click()}
+function importData(){const i=document.createElement('input');i.type='file';i.accept='.json';i.onchange=async()=>{try{const d=JSON.parse(await i.files[0].text());
+  if(!d.students||!d.lessons||!d.payments)throw 0;if(confirm('Заменить текущие данные резервной копией?')){db=d;save();render()}}catch(e){alert('Неверный файл')}};i.click()}
+
+function openDlg(html){dlg.innerHTML=html;dlg.showModal()}
+const dlg=$('#dlg');
+// кнопки копии внизу
+const foot=document.createElement('div');foot.className='wrap mut';foot.style.cssText='padding-bottom:30px;text-align:center';
+foot.innerHTML='Данные хранятся в браузере. <a href="#" onclick="exportData();return false">Скачать копию</a> · <a href="#" onclick="importData();return false">Загрузить копию</a>';
+document.body.appendChild(foot);
+render();
+</script>
+</body>
+</html>
