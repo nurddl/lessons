@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <style>
 :root{
   --bg:#f3f1fb;--bg2:#e9e6fa;--card:#ffffff;--card2:#f8f7ff;--tx:#1b1840;--mut:#7a7899;--line:#ebe9f6;
@@ -163,6 +164,13 @@ select.flt{width:auto;padding:9px 12px}
 @keyframes tin{from{opacity:0;transform:translateY(-16px) scale(.9)}}
 .cf{position:fixed;top:-20px;z-index:200;pointer-events:none;border-radius:2px;animation:fall linear forwards}
 @keyframes fall{to{transform:translate(var(--dx),105vh) rotate(var(--rot));opacity:.9}}
+.auth{max-width:400px;margin:6vh auto 0;padding:28px 24px;text-align:center}
+.auth .logo{justify-content:center;margin-bottom:6px;font-size:20px}
+.auth form{text-align:left}.auth .btn{width:100%;justify-content:center;margin-top:18px}
+.auth .msg{margin-top:12px;font-size:13px;font-weight:700;color:var(--bad);text-align:center}.auth .msg.ok{color:var(--ok)}
+.auth .sw2{margin-top:16px;font-size:13px;color:var(--mut)}.auth .sw2 a{color:var(--pri);font-weight:800;cursor:pointer}
+.noauth nav,.noauth #gear,.noauth #sync{display:none}
+#sync{font-size:12px}
 .fade{animation:fadein .35s ease}
 @keyframes fadein{from{opacity:0;transform:translateY(8px)}}
 </style>
@@ -206,7 +214,8 @@ select.flt{width:auto;padding:9px 12px}
     <button data-v="students"><svg class="ic"><use href="#i-users"/></svg>Ученики</button>
     <button data-v="pay"><svg class="ic"><use href="#i-wallet"/></svg>Оплаты</button>
   </nav>
-  <button class="iconbtn" onclick="profileForm()" title="Профиль и данные"><svg class="ic"><use href="#i-gear"/></svg></button>
+  <span id="sync" class="chip" style="display:none"></span>
+  <button id="gear" class="iconbtn" onclick="profileForm()" title="Профиль и данные"><svg class="ic"><use href="#i-gear"/></svg></button>
 </div></header>
 <main id="app"></main>
 <div id="toasts"></div>
@@ -214,11 +223,35 @@ select.flt{width:auto;padding:9px 12px}
 
 <script>
 // ================= данные =================
+// ----- Supabase: впишите данные проекта (Project Settings -> API). Это публичные значения. -----
+const SUPABASE_URL='';
+const SUPABASE_KEY='';
+// ---------------------------------------------------------------------------------------------
+const CLOUD=!!(SUPABASE_URL&&SUPABASE_KEY);
+const sb=CLOUD&&window.supabase?window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY):null;
 const KEY='tutor.v1';
-let db=load();
-function load(){try{const d=JSON.parse(localStorage.getItem(KEY));if(d&&d.students)return Object.assign({name:'',goal:300000,ach:[],lvl:1},d)}catch(e){}
-  return{students:[],lessons:[],payments:[],name:'',goal:300000,ach:[],lvl:1}}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){}}
+const blank=()=>({students:[],lessons:[],payments:[],name:'',goal:300000,ach:[],lvl:1});
+const norm=d=>Object.assign(blank(),d);
+function loadLocal(){try{const d=JSON.parse(localStorage.getItem(KEY));if(d&&d.students)return norm(d)}catch(e){}return null}
+let db=CLOUD?blank():(loadLocal()||blank());
+let user=null,remoteAt=null,saveT=null,dirty=false;
+function setSync(st){const e=$('#sync');if(!e||!CLOUD)return;e.style.display='';
+  e.className='chip '+({saving:'warn',ok:'ok',err:'bad'}[st]);
+  e.textContent={saving:'Сохраняю…',ok:'Сохранено',err:'Ошибка сохранения'}[st]}
+function save(){
+  if(!CLOUD){try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){}return}
+  if(!user)return;dirty=true;setSync('saving');clearTimeout(saveT);saveT=setTimeout(push,500)}
+async function push(){
+  const{data,error}=await sb.from('tutor_data').upsert({user_id:user.id,data:db,updated_at:new Date().toISOString()}).select('updated_at').single();
+  if(error){setSync('err');toast('alert','Не удалось сохранить',error.message);return}
+  remoteAt=data.updated_at;dirty=false;setSync('ok')}
+async function pull(){
+  const{data,error}=await sb.from('tutor_data').select('data,updated_at').eq('user_id',user.id).maybeSingle();
+  if(error){toast('alert','Не удалось загрузить данные',error.message);return false}
+  if(data){db=norm(data.data);remoteAt=data.updated_at;setSync('ok')}
+  else{const l=loadLocal();db=l&&confirm('Найдены данные, сохранённые в этом браузере. Перенести их в аккаунт?')?l:blank();save()}
+  fixColors();return true}
+function fixColors(){db.students.forEach((s,k)=>{if(!s.color)s.color=COLORS[k%8]})}
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -296,6 +329,7 @@ function checkProgress(){
 let view='home',calMode='week',calDate=new Date(),payFlt='';
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{view=b.dataset.v;render()});
 function render(){
+  if(CLOUD&&!user){showAuth();return}
   checkProgress();
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===view));
   $('#app').innerHTML=`<div class="fade">${({home:vHome,cal:vCal,students:vStudents,pay:vPayments})[view]()}</div>`;
@@ -510,7 +544,7 @@ function profileForm(){
    <label>Цель по доходу на месяц, ₸</label><input type="number" name="goal" min="0" step="1000" value="${db.goal}">
    <div class="row" style="margin-top:16px"><button type="button" class="btn g s" onclick="exportData()">${ic('down','sm')}Скачать копию</button>
    <button type="button" class="btn g s" onclick="importData()">${ic('up','sm')}Загрузить копию</button></div>
-   <p class="mut">Данные хранятся только в этом браузере. Делайте копию хотя бы раз в неделю.</p>${btns()}</form>`);
+   ${CLOUD?`<p class="mut">Вы вошли как <b>${esc(user.email)}</b>. Данные хранятся в облаке и доступны на всех ваших устройствах.</p><button type="button" class="btn d s" onclick="signOut()">Выйти</button>`:`<p class="mut">Данные хранятся только в этом браузере. Делайте копию хотя бы раз в неделю.</p>`}${btns()}</form>`);
   $('#f').onsubmit=e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.target));db.name=f.name.trim();db.goal=+f.goal||0;save();dlg.close();render()};
 }
 function exportData(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(db,null,1)],{type:'application/json'}));a.download=`tutor-backup-${today()}.json`;a.click()}
@@ -518,8 +552,52 @@ function importData(){const i=document.createElement('input');i.type='file';i.ac
   if(!d.students||!d.lessons||!d.payments)throw 0;if(confirm('Заменить текущие данные резервной копией?')){db=Object.assign({name:'',goal:300000,ach:[],lvl:1},d);
   db.students.forEach((s,k)=>{if(!s.color)s.color=COLORS[k%8]});save();dlg.close();render()}}catch(e){alert('Неверный файл')}};i.click()}
 
-db.students.forEach((s,k)=>{if(!s.color)s.color=COLORS[k%8]});
-render();
+
+// ================= вход =================
+let authMode='in';
+const ERR={'Invalid login credentials':'Неверная почта или пароль','User already registered':'Такая почта уже зарегистрирована',
+  'Email not confirmed':'Подтвердите почту по ссылке из письма'};
+function showAuth(msg='',okMsg=false){
+  document.body.classList.add('noauth');
+  const up=authMode==='up';
+  $('#app').innerHTML=`<div class="card auth fade"><div class="logo"><i>${ic('book')}</i><span style="display:inline">Репетитор</span></div>
+   <p class="mut">${up?'Создайте аккаунт, чтобы заходить с любого устройства':'Войдите, чтобы увидеть своих учеников и занятия'}</p>
+   <form id="af"><label>Почта</label><input type="email" name="email" required autocomplete="email">
+   <label>Пароль</label><input type="password" name="password" minlength="6" required autocomplete="${up?'new-password':'current-password'}" placeholder="Не короче 6 символов">
+   <button class="btn">${up?'Зарегистрироваться':'Войти'}</button></form>
+   <div class="msg ${okMsg?'ok':''}" id="amsg">${esc(msg||(sb?'':'Не удалось загрузить библиотеку Supabase. Проверьте интернет.'))}</div>
+   <div class="sw2">${up?'Уже есть аккаунт?':'Нет аккаунта?'} <a onclick="authMode='${up?'in':'up'}';showAuth()">${up?'Войти':'Зарегистрироваться'}</a></div></div>`;
+  $('#af').onsubmit=authSubmit;
+}
+async function authSubmit(e){
+  e.preventDefault();if(!sb)return;
+  const f=Object.fromEntries(new FormData(e.target)),b=e.target.querySelector('button');b.disabled=true;
+  const{data,error}=await(authMode==='in'?sb.auth.signInWithPassword(f):sb.auth.signUp(f));
+  b.disabled=false;
+  if(error)return showAuth(ERR[error.message]||(/least 6/.test(error.message)?'Пароль должен быть не короче 6 символов':error.message));
+  if(authMode==='up'&&!data.session){authMode='in';showAuth('Мы отправили письмо. Подтвердите почту и войдите.',true)}
+}
+async function signOut(){dlg.close();await sb.auth.signOut()}
+async function onSession(s){
+  user=s?.user||null;
+  if(!user){db=blank();render();return}
+  document.body.classList.remove('noauth');
+  await pull();render();
+}
+async function boot(){
+  if(!CLOUD){fixColors();render();return}
+  if(!sb){showAuth();return}
+  const{data:{session}}=await sb.auth.getSession();
+  await onSession(session);
+  sb.auth.onAuthStateChange((ev,s)=>{
+    if(ev==='SIGNED_OUT'||(ev==='SIGNED_IN'&&s&&(!user||user.id!==s.user.id)))setTimeout(()=>onSession(s),0)});
+  // подтянуть изменения, сделанные на другом устройстве
+  document.addEventListener('visibilitychange',async()=>{
+    if(document.hidden||!user||dirty||dlg.open)return;
+    const{data}=await sb.from('tutor_data').select('updated_at').eq('user_id',user.id).maybeSingle();
+    if(data&&remoteAt&&new Date(data.updated_at)>new Date(remoteAt)){await pull();render()}});
+}
+boot();
 </script>
 </body>
 </html>
