@@ -178,8 +178,14 @@ select.flt{width:auto;padding:9px 12px}
 .wk-ad>div{padding:3px;border-left:1px solid var(--line)}.wk-ad>div:first-child{border:0}
 .adc{display:block;background:var(--c);color:#fff;border-radius:8px;padding:2px 8px;font-size:12px;font-weight:700;margin-bottom:2px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mo .c.evt{background:var(--c);color:#fff;border-left:0}
+.rt{width:100%;border-collapse:collapse;font-size:14px}.rt th{text-align:left;font-size:12px;color:var(--mut);padding:8px 10px;border-bottom:1px solid var(--line)}
+.rt td{padding:10px;border-bottom:1px solid var(--line)}.rt .n{text-align:right;white-space:nowrap}.rt tfoot td{font-weight:800;border-bottom:0}.tw{overflow-x:auto}
+.onlyprint{display:none}
+a.btn{text-decoration:none}
 .fade{animation:fadein .35s ease}
 @keyframes fadein{from{opacity:0;transform:translateY(8px)}}
+@media print{:root{--bg:#fff;--card:#fff;--tx:#111;--mut:#555;--line:#ddd;--shadow:none}
+ body{background:#fff}header,#toasts,.noprint,nav{display:none!important}main{padding:0;max-width:none}.card,.stat{box-shadow:none;border:1px solid #ddd}.onlyprint{display:block}.fade{animation:none}}
 </style>
 </head>
 <body>
@@ -212,6 +218,10 @@ select.flt{width:auto;padding:9px 12px}
 <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 20h20zM12 10v5M12 17.5v.5"/></symbol>
 <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M17 2l4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3"/></symbol>
 <symbol id="i-move" viewBox="0 0 24 24"><path d="M4 8h14m-4-4 4 4-4 4M20 16H6m4-4-4 4 4 4"/></symbol>
+<symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></symbol>
+<symbol id="i-share" viewBox="0 0 24 24"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="m8.2 10.8 7.6-3.6M8.2 13.2l7.6 3.6"/></symbol>
+<symbol id="i-pkg" viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4zM3 7v10l9 4 9-4V7M12 11v10"/></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></symbol>
 <symbol id="i-rocket" viewBox="0 0 24 24"><path d="M5 19c-1.5-3 0-5 1.5-6.5L11 8c2-2 5-3.5 9-4-.5 4-2 7-4 9l-4.5 4.5C10 19 8 20.500 5 19zM9 15l-3 3M15 9.500h.01M4 14l-1 4 4-1"/></symbol>
 </defs></svg>
 
@@ -222,6 +232,7 @@ select.flt{width:auto;padding:9px 12px}
     <button data-v="cal"><svg class="ic"><use href="#i-cal"/></svg>Календарь</button>
     <button data-v="students"><svg class="ic"><use href="#i-users"/></svg>Ученики</button>
     <button data-v="pay"><svg class="ic"><use href="#i-wallet"/></svg>Оплаты</button>
+    <button data-v="rep"><svg class="ic"><use href="#i-chart"/></svg>Отчёт</button>
   </nav>
   <span id="sync" class="chip" style="display:none"></span>
   <button id="gear" class="iconbtn" onclick="profileForm()" title="Профиль и данные"><svg class="ic"><use href="#i-gear"/></svg></button>
@@ -239,7 +250,7 @@ const SUPABASE_KEY='sb_publishable_XG1M7l14nqsQDdDFnpfMcA_aHH7dtS7';
 const CLOUD=!!(SUPABASE_URL&&SUPABASE_KEY);
 const sb=CLOUD&&window.supabase?window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY):null;
 const KEY='tutor.v1';
-const blank=()=>({students:[],lessons:[],events:[],series:{},payments:[],name:'',goal:300000,ach:[],lvl:1});
+const blank=()=>({students:[],lessons:[],events:[],series:{},homework:[],packages:[],taxRate:4,payments:[],name:'',goal:300000,ach:[],lvl:1});
 const norm=d=>Object.assign(blank(),d);
 function loadLocal(){try{const d=JSON.parse(localStorage.getItem(KEY));if(d&&d.students)return norm(d)}catch(e){}return null}
 let db=CLOUD?blank():(loadLocal()||blank());
@@ -253,7 +264,7 @@ function save(){
 async function push(){
   const{data,error}=await sb.from('tutor_data').upsert({user_id:user.id,data:db,updated_at:new Date().toISOString()}).select('updated_at').single();
   if(error){setSync('err');toast('alert','Не удалось сохранить',error.message);return}
-  remoteAt=data.updated_at;dirty=false;setSync('ok')}
+  remoteAt=data.updated_at;dirty=false;setSync('ok');pushCabs()}
 async function pull(){
   const{data,error}=await sb.from('tutor_data').select('data,updated_at').eq('user_id',user.id).maybeSingle();
   if(error){toast('alert','Не удалось загрузить данные',error.message);return false}
@@ -296,7 +307,7 @@ function stats(){
   if(!weeks.has(ymd(w)))w=addDays(w,-7);
   while(weeks.has(ymd(w))){streak++;w=addDays(w,-7)}
   return{students:db.students.length,done:done.length,pays:db.payments.length,income,monthInc,debt,streak,
-    planned:db.lessons.filter(l=>l.status==='planned'&&l.date>=today()).length}
+    planned:db.lessons.filter(l=>l.status==='planned'&&l.date>=today()).length,hw:db.homework.filter(h=>h.status==='checked').length}
 }
 const ACH=[
  ['first_s','users','Первый ученик','Добавьте ученика',s=>s.students>=1],
@@ -310,12 +321,14 @@ const ACH=[
  ['e1m','rocket','Миллионер','1 000 000 ₸ всего',s=>s.income>=1000000],
  ['streak4','flame','Огонь!','4 недели подряд',s=>s.streak>=4],
  ['goal','target','Цель месяца','Выполните цель',s=>db.goal>0&&s.monthInc>=db.goal],
- ['clean','spark','Чистый баланс','Нет долгов (5+ занятий)',s=>s.done>=5&&s.debt===0]
+ ['clean','spark','Чистый баланс','Нет долгов (5+ занятий)',s=>s.done>=5&&s.debt===0],
+ ['hw10','book','Проверяющий','Проверьте 10 заданий',s=>s.hw>=10],
+ ['share','share','На связи','Откройте кабинет родителя',s=>db.students.some(x=>x.share)]
 ];
 const TITLES=['Новичок','Практикант','Наставник','Мастер','Гуру','Легенда'];
 const thr=n=>50*n*(n-1);
 const lvlOf=xp=>Math.floor((1+Math.sqrt(1+xp/12.5))/2);
-function xpOf(s){return s.done*20+s.pays*10+s.students*25+db.ach.length*50}
+function xpOf(s){return s.done*20+s.pays*10+s.students*25+s.hw*5+db.ach.length*50}
 function toast(icon,title,sub=''){
   const t=document.createElement('div');t.className='toast';
   t.innerHTML=`<div class="ti">${ic(icon)}</div><div>${title}${sub?`<small>${sub}</small>`:''}</div>`;
@@ -342,7 +355,7 @@ function render(){
   if(extendSeries())save();
   checkProgress();
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===view));
-  $('#app').innerHTML=`<div class="fade">${({home:vHome,cal:vCal,students:vStudents,pay:vPayments})[view]()}</div>`;
+  $('#app').innerHTML=`<div class="fade">${({home:vHome,cal:vCal,students:vStudents,pay:vPayments,rep:vReport})[view]()}</div>`;
 }
 const openDlg=h=>{dlg.innerHTML=h;dlg.showModal()};
 const dlg=$('#dlg');
@@ -378,6 +391,8 @@ function vHome(){
   }
   if(todo.length){h2+=`<div class="sect">Нужно отметить (${todo.length})</div>`+todo.slice(0,6).map(l=>lessonRow(l,true)).join('')}
   h2+=`<div class="sect">Сегодня</div>`+(todayL.length||todayE.length?todayE.map(eventRow).join('')+todayL.map(l=>lessonRow(l)).join(''):`<div class="card empty" style="padding:22px">Сегодня занятий нет</div>`);
+  const hwTodo=db.homework.filter(h=>h.status==='submitted'||hwOverdue(h)).sort((a,b)=>(a.due||'').localeCompare(b.due||''));
+  if(hwTodo.length)h2+=`<div class="sect">Задания · ${hwTodo.length}</div>`+hwTodo.slice(0,5).map(h=>hwRow(h)).join('');
   if(debtors.length)h2+=`<div class="sect">Должники</div>`+debtors.map(x=>`<div class="li" style="--c:${x.color}">${avatar(x,'sm')}<div class="sp t">${esc(x.name)}</div>${balChip(balance(x.id))}<button class="btn s ok" onclick="payForm('${x.id}')">${ic('plus','sm')}Оплата</button></div>`).join('');
   h2+=`<div class="sect">Достижения · ${db.ach.length}/${ACH.length}</div><div class="ach">`+
     ACH.map(([id,icn,t,d])=>`<div class="${db.ach.includes(id)?'':'lock'}"><div class="ai">${ic(db.ach.includes(id)?icn:'lock','lg')}</div><b>${t}</b><span>${d}</span></div>`).join('')+`</div>`;
@@ -625,7 +640,8 @@ function lessonPop(id){
     <button class="btn g" onclick="setSt('${id}','cancelled')">${ic('x','sm')}Бесплатный пропуск</button>
     <button class="btn g" onclick="setSt('${id}','missed')">${ic('alert','sm')}Платный пропуск</button>
     <button class="btn g" onclick="lessonForm('${id}')">${ic('edit','sm')}Изменить</button>
-    <button class="btn g" onclick="dlg.close()">Закрыть</button></div>
+    <button class="btn g" onclick="hwForm(null,{student:'${l.student}',lesson:'${id}'})">${ic('book','sm')}Задать ДЗ</button>
+    <button class="btn g" onclick="dlg.close()" style="grid-column:1/-1">Закрыть</button></div>
    <p class="mut" style="margin:10px 0 0">Бесплатный пропуск не списывается с баланса. Платный пропуск списывается как проведённое занятие.</p>`);
 }
 
@@ -697,15 +713,20 @@ function vStudents(){
   if(!db.students.length)return h+`<div class="card empty">${ic('users')}<p>Пока нет учеников</p></div>`;
   for(const s of [...db.students].sort((a,b)=>a.name.localeCompare(b.name))){
     const n=db.lessons.filter(l=>l.student===s.id&&l.status==='done').length,lv=Math.floor(n/10)+1;
+    const pk=pkgInfo(s.id),hwOpen=db.homework.filter(h=>h.student===s.id&&h.status!=='checked').length;
     const next=db.lessons.filter(l=>l.student===s.id&&l.status==='planned'&&l.date>=today()).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time))[0];
     h+=`<div class="card"><div class="row" style="flex-wrap:nowrap">${avatar(s)}<div class="sp"><div style="font-weight:800;font-size:16px">${esc(s.name)}</div>
       <div class="mut">${esc(s.contact||'')}${s.contact?' · ':''}${money(s.rate)} / ${s.dur||60} мин</div></div><div style="text-align:right">${balChip(balance(s.id))}</div></div>
       <div class="row" style="margin:12px 0 4px"><span class="chip warn">${ic('star','sm')}Ур. ${lv}</span>
       <div class="bar-p sp" style="min-width:80px"><i style="width:${n%10*10}%"></i></div><span class="mut">${n%10}/10 до ур. ${lv+1}</span></div>
       <div class="mut">${next?ic('clock','sm')+' Ближайшее: '+next.date.split('-').reverse().slice(0,2).join('.')+' в '+next.time:'Занятий в плане нет'} · проведено ${n}</div>
+      ${pk?`<div class="row" style="margin:10px 0 2px"><span class="chip ${pk.left<=1?'bad':'pri'}">${ic('pkg','sm')}Пакет: осталось ${Math.max(0,pk.left)} из ${pk.total}</span><div class="bar-p sp" style="min-width:80px"><i style="width:${Math.max(0,Math.min(100,pk.left/pk.total*100))}%"></i></div></div>`:''}
       ${s.note?`<div class="mut" style="margin-top:4px">${esc(s.note)}</div>`:''}
       <div class="row" style="margin-top:12px"><button class="btn s ok" onclick="payForm('${s.id}')">${ic('plus','sm')}Оплата</button>
-      <button class="btn g s" onclick="lessonForm(null,{student:'${s.id}'})">${ic('cal','sm')}Занятие</button><span class="sp"></span>
+      <button class="btn g s" onclick="lessonForm(null,{student:'${s.id}'})">${ic('cal','sm')}Занятие</button>
+      <button class="btn g s" onclick="hwList('${s.id}')">${ic('book','sm')}Задания${hwOpen?' ('+hwOpen+')':''}</button>
+      <button class="btn g s" onclick="pkgForm('${s.id}')">${ic('pkg','sm')}Пакет</button>
+      <button class="btn g s" onclick="shareForm('${s.id}')">${ic('share','sm')}${s.share?'Кабинет ✓':'Кабинет'}</button><span class="sp"></span>
       <button class="btn g s" onclick="studentForm('${s.id}')">${ic('edit','sm')}</button><button class="btn d s" onclick="delStudent('${s.id}')">${ic('trash','sm')}</button></div></div>`;
   }
   return h;
@@ -725,7 +746,9 @@ function studentForm(id){
 }
 function delStudent(id){
   if(!confirm('Удалить ученика вместе с его занятиями и оплатами?'))return;
-  db.students=db.students.filter(s=>s.id!==id);db.lessons=db.lessons.filter(l=>l.student!==id);db.payments=db.payments.filter(p=>p.student!==id);save();render()}
+  db.lessons=db.lessons.filter(l=>l.student!==id);db.payments=db.payments.filter(p=>p.student!==id);db.homework=db.homework.filter(h=>h.student!==id);db.packages=db.packages.filter(p=>p.student!==id);
+  const st=stu(id);if(st&&st.share&&sb)sb.from('cabinets').delete().eq('token',st.share);
+  db.students=db.students.filter(s=>s.id!==id);save();render()}
 
 // ================= оплаты =================
 function vPayments(){
@@ -747,7 +770,7 @@ function vPayments(){
   }
   return h;
 }
-function delPay(id){if(confirm('Удалить оплату?')){db.payments=db.payments.filter(p=>p.id!==id);save();render()}}
+function delPay(id){if(confirm('Удалить оплату?')){const p=db.payments.find(x=>x.id===id);if(p&&p.pkg)db.packages=db.packages.filter(k=>k.id!==p.pkg);db.payments=db.payments.filter(p=>p.id!==id);save();render()}}
 function payForm(sid,id){
   if(!db.students.length){toast('users','Сначала добавьте ученика');return}
   const sel=sid||db.students[0].id;
@@ -766,19 +789,215 @@ function payForm(sid,id){
     save();dlg.close();render()};
 }
 
+// ================= задания и пакеты =================
+const HWST={assigned:'Задано',submitted:'Сдано',checked:'Проверено'};
+let hwCur=null;
+const hwOverdue=h=>h.status==='assigned'&&h.due&&h.due<today();
+const hwChip=h=>hwOverdue(h)?`<span class="chip bad">${ic('alert','sm')}просрочено</span>`:`<span class="chip ${h.status==='checked'?'ok':h.status==='submitted'?'warn':'pri'}">${HWST[h.status]}</span>`;
+function hwRow(h,showStu=true){
+  const s=stu(h.student);
+  return `<div class="li" style="--c:${s?.color||'var(--pri)'}">${showStu?avatar(s,'sm'):''}<div class="sp"><div class="t">${esc(h.title)}</div>
+    <div class="mut">${showStu?esc(s?.name||'')+' · ':''}срок ${h.due?fmtDM(h.due):'—'}${h.comment?' · '+esc(h.comment):''}</div></div>${hwChip(h)}
+    ${h.status==='assigned'?`<button class="btn s ok" onclick="hwSet('${h.id}','submitted')" title="Ученик сдал работу">${ic('check','sm')}Сдано</button>`
+     :h.status==='submitted'?`<button class="btn s ok" onclick="hwSet('${h.id}','checked')">${ic('check','sm')}Проверено</button>`:''}
+    <button class="btn g s" onclick="hwForm('${h.id}',{},${hwCur?`'${hwCur}'`:'null'})">${ic('edit','sm')}</button></div>`;
+}
+function hwSet(id,st){
+  const h=db.homework.find(x=>x.id===id);h.status=st;save();
+  if(st==='checked')toast('check','Задание проверено','+5 XP');
+  if(dlg.open&&hwCur)hwList(hwCur);render();
+}
+function hwList(sid){
+  const s=stu(sid);hwCur=sid;
+  const hs=db.homework.filter(h=>h.student===sid).sort((a,b)=>(a.status==='checked')-(b.status==='checked')||(b.due||'').localeCompare(a.due||''));
+  openDlg(`<div class="row"><h2 class="sp" style="font-size:18px">Задания · ${esc(s.name)}</h2><button class="btn s" onclick="hwForm(null,{student:'${sid}'},'${sid}')">${ic('plus','sm')}Задание</button></div>
+   <div style="margin-top:14px;max-height:55vh;overflow:auto">${hs.length?hs.map(h=>hwRow(h,false)).join(''):`<div class="empty" style="padding:24px">Заданий пока нет</div>`}</div>
+   <div class="row" style="margin-top:12px"><span class="sp"></span><button class="btn g" onclick="dlg.close()">Закрыть</button></div>`);
+}
+function hwForm(id,pre={},back=null){
+  if(!db.students.length)return;
+  const h=db.homework.find(x=>x.id===id)||{student:pre.student||db.students[0].id,title:'',desc:'',due:pre.due||ymd(addDays(new Date(),7)),status:'assigned',comment:'',lesson:pre.lesson};
+  openDlg(`<h2>${id?'Задание':'Новое задание'}</h2><form id="f">
+   <label>Ученик</label><select name="student">${db.students.map(s=>`<option value="${s.id}" ${s.id===h.student?'selected':''}>${esc(s.name)}</option>`).join('')}</select>
+   <label>Что задано</label><input name="title" value="${esc(h.title)}" placeholder="Например: №12–18, параграф 5" required>
+   <label>Подробности</label><textarea name="desc" rows="3">${esc(h.desc)}</textarea>
+   <label>Срок сдачи</label><input type="date" name="due" value="${h.due||''}">
+   ${id?`<label>Статус</label><div class="sw">${Object.entries(HWST).map(([k,v])=>`<label><input type="radio" name="status" value="${k}" ${h.status===k?'checked':''}><span>${v}</span></label>`).join('')}</div>
+   <label>Комментарий после проверки (видит родитель)</label><input name="comment" value="${esc(h.comment)}">`:''}
+   ${btns(id?`delHw('${id}',${back?`'${back}'`:'null'})`:'')}</form>`);
+  $('#f').onsubmit=e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.target));
+    const v={student:f.student,title:f.title.trim(),desc:f.desc.trim(),due:f.due||''};
+    if(id){Object.assign(h,v,{status:f.status||h.status,comment:(f.comment||'').trim()});if(h.status==='checked'&&f.status==='checked')toast('check','Задание проверено','+5 XP')}
+    else{db.homework.push({id:uid(),...v,status:'assigned',comment:'',lesson:h.lesson||null,created:today()});toast('book','Задание добавлено')}
+    save();dlg.close();if(back)hwList(back);render()};
+}
+function delHw(id,back){if(!confirm('Удалить задание?'))return;db.homework=db.homework.filter(h=>h.id!==id);save();dlg.close();if(back)hwList(back);render()}
+
+function pkgInfo(sid){
+  const ps=db.packages.filter(p=>p.student===sid);if(!ps.length)return null;
+  const total=ps.reduce((a,p)=>a+p.lessons,0),first=ps.map(p=>p.date).sort()[0];
+  const used=db.lessons.filter(l=>l.student===sid&&charged(l)&&l.date>=first).length;
+  return{total,used,left:total-used};
+}
+function pkgForm(sid){
+  const s=stu(sid),rate=s.rate||0;
+  openDlg(`<h2>Пакет занятий</h2><p class="mut">${esc(s.name)}. Запишет оплату и покажет, сколько занятий осталось.</p><form id="f">
+   <div class="two"><div><label>Занятий в пакете</label><input type="number" name="n" min="1" value="8" required oninput="this.form.price.value=this.value*${rate}"></div>
+   <div><label>Стоимость пакета, ₸</label><input type="number" name="price" min="0" value="${8*rate}" required></div></div>
+   <div class="two"><div><label>Дата оплаты</label><input type="date" name="date" value="${today()}" required></div>
+   <div><label>Способ</label><select name="method">${['Kaspi','Перевод','Наличные','Карта','Другое'].map(m=>`<option>${m}</option>`).join('')}</select></div></div>
+   <p class="mut">Если пакет со скидкой, укажите цену занятия в расписании так, чтобы сумма совпала. Тогда баланс будет точным.</p>${btns()}</form>`);
+  $('#f').onsubmit=e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.target));
+    const pid=uid(),pay=uid();
+    db.packages.push({id:pid,student:sid,lessons:+f.n,price:+f.price,date:f.date,pay});
+    db.payments.push({id:pay,student:sid,amount:+f.price,date:f.date,method:f.method,note:`Пакет ${f.n} занятий`,pkg:pid});
+    toast('wallet','Пакет записан',`${f.n} занятий · ${money(+f.price)}`);save();dlg.close();render()};
+}
+
+// ================= отчёт за месяц =================
+let repDate=new Date(new Date().getFullYear(),new Date().getMonth(),1);
+function repNav(n){repDate=new Date(repDate.getFullYear(),repDate.getMonth()+n,1);render()}
+const repTitle=()=>repDate.toLocaleDateString('ru-RU',{month:'long',year:'numeric'});
+function repData(){
+  const m=ymd(repDate).slice(0,7);
+  const rows=db.students.map(s=>{
+    const L=db.lessons.filter(l=>l.student===s.id&&l.date.startsWith(m));
+    const done=L.filter(l=>l.status==='done'),miss=L.filter(l=>l.status==='missed');
+    return{s,done:done.length,miss:miss.length,free:L.filter(l=>l.status==='cancelled').length,
+      earned:[...done,...miss].reduce((a,l)=>a+l.price,0),
+      paid:db.payments.filter(p=>p.student===s.id&&p.date.startsWith(m)).reduce((a,p)=>a+p.amount,0)};
+  }).filter(r=>r.done||r.miss||r.free||r.paid);
+  const tot=rows.reduce((a,r)=>({done:a.done+r.done,miss:a.miss+r.miss,free:a.free+r.free,earned:a.earned+r.earned,paid:a.paid+r.paid}),{done:0,miss:0,free:0,earned:0,paid:0});
+  const rate=+db.taxRate||0;tot.tax=Math.round(tot.paid*rate/100);
+  const pays=db.payments.filter(p=>p.date.startsWith(m)).sort((a,b)=>a.date.localeCompare(b.date));
+  return{rows,tot,pays,rate};
+}
+function vReport(){
+  const{rows,tot,pays,rate}=repData();
+  let h=`<div class="head"><button class="iconbtn noprint" onclick="repNav(-1)">${ic('l')}</button><button class="iconbtn noprint" onclick="repNav(1)">${ic('r')}</button>
+   <h2 class="sp" style="text-transform:none"><span class="ttl" style="font-size:20px">${repTitle()}</span></h2>
+   <button class="btn g s noprint" onclick="repCSV()">${ic('down','sm')}CSV</button><button class="btn s noprint" onclick="window.print()">${ic('down','sm')}PDF / печать</button></div>
+   <div class="onlyprint" style="margin-bottom:10px"><h2>Отчёт за ${repTitle()}${db.name?' · '+esc(db.name):''}</h2></div>
+   <div class="stats">
+    <div class="stat"><span class="mut">Получено оплат</span><b>${money(tot.paid)}</b></div>
+    <div class="stat"><span class="mut">Начислено за занятия</span><b>${money(tot.earned)}</b></div>
+    <div class="stat"><span class="mut">Налог ${rate}% (с оплат)</span><b>${money(tot.tax)}</b></div>
+    <div class="stat"><span class="mut">Проведено занятий</span><b>${tot.done}</b></div></div>`;
+  if(!rows.length)return h+`<div class="card empty">${ic('chart')}<p>За этот месяц данных нет</p></div>`;
+  h+=`<div class="card tw"><table class="rt"><thead><tr><th>Ученик</th><th class="n">Проведено</th><th class="n">Платных пропусков</th><th class="n">Бесплатных</th><th class="n">Начислено</th><th class="n">Получено</th></tr></thead><tbody>
+   ${rows.map(r=>`<tr><td><b>${esc(r.s.name)}</b></td><td class="n">${r.done}</td><td class="n">${r.miss}</td><td class="n">${r.free}</td><td class="n">${money(r.earned)}</td><td class="n">${money(r.paid)}</td></tr>`).join('')}</tbody>
+   <tfoot><tr><td>Итого</td><td class="n">${tot.done}</td><td class="n">${tot.miss}</td><td class="n">${tot.free}</td><td class="n">${money(tot.earned)}</td><td class="n">${money(tot.paid)}</td></tr></tfoot></table></div>`;
+  if(pays.length)h+=`<div class="sect">Оплаты за месяц</div><div class="card tw"><table class="rt"><thead><tr><th>Дата</th><th>Ученик</th><th>Способ</th><th class="n">Сумма</th></tr></thead><tbody>
+   ${pays.map(p=>`<tr><td>${fmtDM(p.date)}</td><td>${esc(stu(p.student)?.name||'удалён')}</td><td>${esc(p.method)}${p.note?' · '+esc(p.note):''}</td><td class="n">${money(p.amount)}</td></tr>`).join('')}</tbody></table></div>`;
+  h+=`<p class="mut noprint">Налог считается от полученных оплат за месяц по ставке из настроек (шестерёнка). Это справочная сумма, проверьте действующие правила в налоговой.</p>`;
+  return h;
+}
+function repCSV(){
+  const{rows,tot,pays,rate}=repData();
+  const q=v=>{v=String(v??'');return /[;"\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+  const L=[[`Отчёт за ${repTitle()}`],[],['Ученик','Проведено','Платных пропусков','Бесплатных пропусков','Начислено, ₸','Получено, ₸'],
+    ...rows.map(r=>[r.s.name,r.done,r.miss,r.free,r.earned,r.paid]),
+    ['Итого',tot.done,tot.miss,tot.free,tot.earned,tot.paid],[`Налог ${rate}%`,'','','','',tot.tax],[],
+    ['Оплаты'],['Дата','Ученик','Сумма, ₸','Способ','Заметка'],
+    ...pays.map(p=>[p.date,stu(p.student)?.name||'',p.amount,p.method,p.note||''])];
+  const csv='﻿'+L.map(r=>r.map(q).join(';')).join('\r\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download=`report-${ymd(repDate).slice(0,7)}.csv`;a.click();
+}
+
+// ================= кабинет родителя =================
+const cabLink=t=>location.href.split('#')[0].split('?')[0]+'?c='+t;
+function newToken(){const a=new Uint8Array(24);crypto.getRandomValues(a);const c='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';return[...a].map(x=>c[x%62]).join('')}
+const cabCache={};
+function snapshot(s){
+  const lo=ymd(addDays(new Date(),-90)),hi=ymd(addDays(new Date(),60));
+  return{name:s.name,tutor:db.name||'',bal:balance(s.id),pkg:pkgInfo(s.id),
+    lessons:db.lessons.filter(l=>l.student===s.id&&l.date>=lo&&l.date<=hi).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time))
+      .map(l=>({d:l.date,t:l.time,dur:l.dur,sub:l.subject||'',st:l.status,p:l.price,mv:l.moved?{d:l.moved.date,t:l.moved.time}:null})),
+    hw:db.homework.filter(h=>h.student===s.id).sort((a,b)=>(b.due||'').localeCompare(a.due||'')).slice(0,30)
+      .map(h=>({title:h.title,desc:h.desc,due:h.due,st:h.status,c:h.comment||''})),
+    pays:db.payments.filter(p=>p.student===s.id).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,20).map(p=>({d:p.date,a:p.amount,m:p.method})),
+    at:new Date().toISOString()};
+}
+async function pushCab(s,force){
+  const data=snapshot(s),key=JSON.stringify({...data,at:0});
+  if(!force&&cabCache[s.share]===key)return null;
+  const{error}=await sb.from('cabinets').upsert({token:s.share,user_id:user.id,student_id:s.id,data,updated_at:new Date().toISOString()},{onConflict:'token'});
+  if(!error)cabCache[s.share]=key;
+  return error||null;
+}
+const pushCabs=()=>Promise.all(db.students.filter(s=>s.share).map(s=>pushCab(s)));
+function shareForm(sid){
+  const s=stu(sid);
+  if(!CLOUD)return openDlg(`<h2>Кабинет родителя</h2><p class="mut">Ссылки для родителей работают только при подключённом облаке (Supabase) и входе в аккаунт.</p><div class="row"><span class="sp"></span><button class="btn g" onclick="dlg.close()">Закрыть</button></div>`);
+  if(!s.share)return openDlg(`<h2>Кабинет родителя</h2><p class="mut">Создайте ссылку для ${esc(s.name)} и отправьте её родителю или ученику. Регистрация не нужна. Они увидят расписание, домашние задания, оплаты и остаток пакета. Ваши заметки скрыты.</p>
+    <div class="row" style="margin-top:14px"><span class="sp"></span><button class="btn g" onclick="dlg.close()">Отмена</button><button class="btn" onclick="enableShare('${sid}')">${ic('share','sm')}Создать ссылку</button></div>`);
+  const link=cabLink(s.share),msg=`Здравствуйте! Расписание, домашние задания и оплаты (${s.name}): ${link}`;
+  openDlg(`<h2>Кабинет родителя</h2><p class="mut">Ссылка для ${esc(s.name)}. Любой, у кого она есть, видит этот кабинет. Данные обновляются, когда вы открываете приложение.</p>
+   <input readonly value="${esc(link)}" onclick="this.select()" id="cl">
+   <div class="row" style="margin-top:12px"><button class="btn s" onclick="copyLink('${esc(link)}')">${ic('copy','sm')}Копировать</button>
+    <a class="btn g s" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(msg)}">WhatsApp</a>
+    <a class="btn g s" target="_blank" rel="noopener" href="https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent('Расписание и задания: '+s.name)}">Telegram</a></div>
+   <div class="row" style="margin-top:14px"><button class="btn d s" onclick="disableShare('${sid}')">Отключить ссылку</button><button class="btn g s" onclick="disableShare('${sid}',true)">Новая ссылка</button><span class="sp"></span><button class="btn g" onclick="dlg.close()">Закрыть</button></div>`);
+}
+async function copyLink(l){try{await navigator.clipboard.writeText(l);toast('check','Ссылка скопирована')}catch(e){const i=$('#cl');i&&i.select();toast('alert','Скопируйте ссылку вручную')}}
+async function enableShare(sid){
+  const s=stu(sid);s.share=newToken();
+  const err=await pushCab(s,true);
+  if(err){delete s.share;toast('alert','Не удалось создать ссылку','Выполните supabase/cabinet.sql в Supabase. '+err.message);return}
+  save();shareForm(sid);render();
+}
+async function disableShare(sid,regen){
+  const s=stu(sid);if(!regen&&!confirm('Отключить ссылку? Родитель потеряет доступ.'))return;
+  await sb.from('cabinets').delete().eq('token',s.share);delete cabCache[s.share];delete s.share;save();
+  if(regen)return enableShare(sid);
+  shareForm(sid);render();
+}
+// страница родителя: открывается по ссылке ?c=...
+async function cabinetBoot(token){
+  document.body.classList.add('noauth');
+  const app=$('#app');app.innerHTML='<div class="empty">Загрузка…</div>';
+  const fail=()=>app.innerHTML=`<div class="card empty fade">${ic('lock')}<h3>Ссылка недействительна</h3><p class="mut">Возможно, репетитор отключил доступ. Попросите новую ссылку.</p></div>`;
+  if(!sb)return fail();
+  const{data,error}=await sb.rpc('get_cabinet',{p_token:token});
+  if(error||!data)return fail();
+  app.innerHTML=`<div class="fade">${vCabinet(data)}</div>`;
+}
+function vCabinet(d){
+  const t=today();
+  const up=d.lessons.filter(l=>l.st==='planned'&&l.d>=t);
+  const past=d.lessons.filter(l=>!(l.st==='planned'&&l.d>=t)).sort((a,b)=>(b.d+b.t).localeCompare(a.d+a.t)).slice(0,15);
+  const row=l=>`<div class="li"><div class="sp"><div class="t">${fmtDate(l.d)}, ${l.t}</div>
+    <div class="mut">${l.dur} мин${l.sub?' · '+esc(l.sub):''}${l.mv?` · перенесено с ${fmtDM(l.mv.d)} ${l.mv.t}`:''}</div></div>
+    <span class="chip ${l.st==='done'?'ok':l.st==='missed'?'bad':l.st==='cancelled'?'warn':'pri'}">${ST[l.st]}</span></div>`;
+  const hw=h=>`<div class="li"><div class="sp"><div class="t">${esc(h.title)}</div><div class="mut">${h.due?'срок '+fmtDM(h.due):''}${h.desc?' · '+esc(h.desc):''}${h.c?' · Комментарий: '+esc(h.c):''}</div></div>
+    ${hwChip({status:h.st,due:h.due})}</div>`;
+  const pk=d.pkg;
+  return `<div class="hero"><h1>${esc(d.name)}</h1><div class="lv">${ic('book','sm')}${d.tutor?'Репетитор: '+esc(d.tutor):'Кабинет ученика'}</div>
+    <div class="xp">Обновлено ${new Date(d.at).toLocaleString('ru-RU',{day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'})}</div></div>
+   <div class="grid3"><div class="card kpi"><span class="mut">Баланс</span><div style="margin-top:6px">${balChip(d.bal)}</div></div>
+    ${pk?`<div class="card kpi"><span class="mut">Пакет занятий</span><b>${Math.max(0,pk.left)} из ${pk.total}</b><span class="mut">осталось</span></div>`:''}
+    <div class="card kpi"><span class="mut">Ближайшее занятие</span><b style="font-size:16px">${up[0]?fmtDM(up[0].d)+' · '+up[0].t:'—'}</b></div></div>
+   <div class="sect">Расписание</div>${up.length?up.map(row).join(''):'<div class="card empty" style="padding:22px">Занятий в плане нет</div>'}
+   <div class="sect">Домашние задания</div>${d.hw.length?d.hw.map(hw).join(''):'<div class="card empty" style="padding:22px">Заданий нет</div>'}
+   <div class="sect">Оплаты</div>${d.pays.length?d.pays.map(p=>`<div class="li"><div class="sp"><div class="t ok">+${money(p.a)}</div><div class="mut">${fmtDM(p.d)} · ${esc(p.m)}</div></div></div>`).join(''):'<div class="card empty" style="padding:22px">Оплат пока нет</div>'}
+   ${past.length?`<div class="sect">История занятий</div>${past.map(row).join('')}`:''}`;
+}
+
 // ================= профиль и копии =================
 function profileForm(){
   openDlg(`<h2>Профиль и данные</h2><form id="f">
    <label>Ваше имя</label><input name="name" value="${esc(db.name)}" placeholder="Как к вам обращаться">
-   <label>Цель по доходу на месяц, ₸</label><input type="number" name="goal" min="0" step="1000" value="${db.goal}">
+   <div class="two"><div><label>Цель по доходу на месяц, ₸</label><input type="number" name="goal" min="0" step="1000" value="${db.goal}"></div>
+   <div><label>Налог, % (для отчёта)</label><input type="number" name="taxRate" min="0" max="100" step="0.5" value="${db.taxRate}"></div></div>
    <div class="row" style="margin-top:16px"><button type="button" class="btn g s" onclick="exportData()">${ic('down','sm')}Скачать копию</button>
    <button type="button" class="btn g s" onclick="importData()">${ic('up','sm')}Загрузить копию</button></div>
    ${CLOUD?`<p class="mut">Вы вошли как <b>${esc(user.email)}</b>. Данные хранятся в облаке и доступны на всех ваших устройствах.</p><button type="button" class="btn d s" onclick="signOut()">Выйти</button>`:`<p class="mut">Данные хранятся только в этом браузере. Делайте копию хотя бы раз в неделю.</p>`}${btns()}</form>`);
-  $('#f').onsubmit=e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.target));db.name=f.name.trim();db.goal=+f.goal||0;save();dlg.close();render()};
+  $('#f').onsubmit=e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.target));db.name=f.name.trim();db.goal=+f.goal||0;db.taxRate=+f.taxRate||0;save();dlg.close();render()};
 }
 function exportData(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(db,null,1)],{type:'application/json'}));a.download=`tutor-backup-${today()}.json`;a.click()}
 function importData(){const i=document.createElement('input');i.type='file';i.accept='.json';i.onchange=async()=>{try{const d=JSON.parse(await i.files[0].text());
-  if(!d.students||!d.lessons||!d.payments)throw 0;if(confirm('Заменить текущие данные резервной копией?')){db=Object.assign({name:'',goal:300000,ach:[],lvl:1},d);
+  if(!d.students||!d.lessons||!d.payments)throw 0;if(confirm('Заменить текущие данные резервной копией?')){db=norm(d);
   db.students.forEach((s,k)=>{if(!s.color)s.color=COLORS[k%8]});save();dlg.close();render()}}catch(e){alert('Неверный файл')}};i.click()}
 
 
@@ -807,13 +1026,16 @@ async function authSubmit(e){
   if(authMode==='up'&&!data.session){authMode='in';showAuth('Мы отправили письмо. Подтвердите почту и войдите.',true)}
 }
 async function signOut(){dlg.close();await sb.auth.signOut()}
+dlg.addEventListener('close',()=>{hwCur=null});
 async function onSession(s){
   user=s?.user||null;
   if(!user){db=blank();render();return}
   document.body.classList.remove('noauth');
-  await pull();render();
+  await pull();render();pushCabs();
 }
 async function boot(){
+  const cab=new URLSearchParams(location.search).get('c');
+  if(cab)return cabinetBoot(cab);
   if(!CLOUD){fixColors();render();return}
   if(!sb){showAuth();return}
   const{data:{session}}=await sb.auth.getSession();
