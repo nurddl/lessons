@@ -171,6 +171,13 @@ select.flt{width:auto;padding:9px 12px}
 .auth .sw2{margin-top:16px;font-size:13px;color:var(--mut)}.auth .sw2 a{color:var(--pri);font-weight:800;cursor:pointer}
 .noauth nav,.noauth #gear,.noauth #sync{display:none}
 #sync{font-size:12px}
+.acts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:16px}.acts .btn{justify-content:center;padding:11px 8px}
+.ev.evt{background:var(--c);color:#fff;border-left:0}.ev.evt span{display:block;opacity:.85}
+.ev{cursor:grab}.ev .ck{stroke:currentColor}
+.wk-ad{display:grid;grid-template-columns:48px repeat(7,1fr);border-bottom:1px solid var(--line);min-height:30px}
+.wk-ad>div{padding:3px;border-left:1px solid var(--line)}.wk-ad>div:first-child{border:0}
+.adc{display:block;background:var(--c);color:#fff;border-radius:8px;padding:2px 8px;font-size:12px;font-weight:700;margin-bottom:2px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mo .c.evt{background:var(--c);color:#fff;border-left:0}
 .fade{animation:fadein .35s ease}
 @keyframes fadein{from{opacity:0;transform:translateY(8px)}}
 </style>
@@ -203,6 +210,8 @@ select.flt{width:auto;padding:9px 12px}
 <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></symbol>
 <symbol id="i-crown" viewBox="0 0 24 24"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/></symbol>
 <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 20h20zM12 10v5M12 17.5v.5"/></symbol>
+<symbol id="i-repeat" viewBox="0 0 24 24"><path d="M17 2l4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3"/></symbol>
+<symbol id="i-move" viewBox="0 0 24 24"><path d="M4 8h14m-4-4 4 4-4 4M20 16H6m4-4-4 4 4 4"/></symbol>
 <symbol id="i-rocket" viewBox="0 0 24 24"><path d="M5 19c-1.5-3 0-5 1.5-6.5L11 8c2-2 5-3.5 9-4-.5 4-2 7-4 9l-4.5 4.5C10 19 8 20.500 5 19zM9 15l-3 3M15 9.500h.01M4 14l-1 4 4-1"/></symbol>
 </defs></svg>
 
@@ -230,7 +239,7 @@ const SUPABASE_KEY='sb_publishable_XG1M7l14nqsQDdDFnpfMcA_aHH7dtS7';
 const CLOUD=!!(SUPABASE_URL&&SUPABASE_KEY);
 const sb=CLOUD&&window.supabase?window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY):null;
 const KEY='tutor.v1';
-const blank=()=>({students:[],lessons:[],payments:[],name:'',goal:300000,ach:[],lvl:1});
+const blank=()=>({students:[],lessons:[],events:[],series:{},payments:[],name:'',goal:300000,ach:[],lvl:1});
 const norm=d=>Object.assign(blank(),d);
 function loadLocal(){try{const d=JSON.parse(localStorage.getItem(KEY));if(d&&d.students)return norm(d)}catch(e){}return null}
 let db=CLOUD?blank():(loadLocal()||blank());
@@ -266,7 +275,7 @@ const avatar=(s,c='')=>`<div class="avatar ${c}" style="--c:${s?.color||'#999'}"
 const toMin=t=>{const[a,b]=t.split(':');return +a*60+ +b};
 const mondayOf=d=>{const x=new Date(d);x.setHours(0,0,0,0);x.setDate(x.getDate()-(x.getDay()+6)%7);return x};
 const addDays=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x};
-const ST={planned:'Запланировано',done:'Проведено',missed:'Пропуск (платный)',cancelled:'Отменено'};
+const ST={planned:'Запланировано',done:'Проведено',missed:'Платный пропуск',cancelled:'Бесплатный пропуск'};
 const charged=l=>l.status==='done'||l.status==='missed';
 function balance(sid){
   const p=db.payments.filter(x=>x.student===sid).reduce((a,x)=>a+x.amount,0);
@@ -330,6 +339,7 @@ let view='home',calMode='week',calDate=new Date(),payFlt='';
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{view=b.dataset.v;render()});
 function render(){
   if(CLOUD&&!user){showAuth();return}
+  if(extendSeries())save();
   checkProgress();
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===view));
   $('#app').innerHTML=`<div class="fade">${({home:vHome,cal:vCal,students:vStudents,pay:vPayments})[view]()}</div>`;
@@ -344,7 +354,8 @@ function vHome(){
   const pct=Math.min(100,(xp-lo)/(hi-lo)*100);
   const t=today(),h=new Date().getHours();
   const hello=h<5?'Доброй ночи':h<12?'Доброе утро':h<18?'Добрый день':'Добрый вечер';
-  const todayL=db.lessons.filter(l=>l.date===t&&l.status!=='cancelled').sort((a,b)=>a.time.localeCompare(b.time));
+  const todayL=db.lessons.filter(l=>l.date===t).sort((a,b)=>a.time.localeCompare(b.time));
+  const todayE=db.events.filter(e=>e.date===t).sort((a,b)=>a.time.localeCompare(b.time));
   const todo=db.lessons.filter(l=>l.status==='planned'&&(l.date<t||(l.date===t&&toMin(l.time)+l.dur<=new Date().getHours()*60+new Date().getMinutes()))).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
   const debtors=db.students.filter(x=>balance(x.id)<0).sort((a,b)=>balance(a.id)-balance(b.id));
   const gp=db.goal>0?Math.min(1,s.monthInc/db.goal):0,C=2*Math.PI*40;
@@ -366,7 +377,7 @@ function vHome(){
     h2+=`<div class="card empty">${ic('rocket')}<h3>Начнём!</h3><p class="mut">Добавьте первого ученика — и получите первое достижение.</p><button class="btn" onclick="studentForm()">${ic('plus','sm')}Добавить ученика</button></div>`;
   }
   if(todo.length){h2+=`<div class="sect">Нужно отметить (${todo.length})</div>`+todo.slice(0,6).map(l=>lessonRow(l,true)).join('')}
-  h2+=`<div class="sect">Сегодня</div>`+(todayL.length?todayL.map(l=>lessonRow(l)).join(''):`<div class="card empty" style="padding:22px">Сегодня занятий нет</div>`);
+  h2+=`<div class="sect">Сегодня</div>`+(todayL.length||todayE.length?todayE.map(eventRow).join('')+todayL.map(l=>lessonRow(l)).join(''):`<div class="card empty" style="padding:22px">Сегодня занятий нет</div>`);
   if(debtors.length)h2+=`<div class="sect">Должники</div>`+debtors.map(x=>`<div class="li" style="--c:${x.color}">${avatar(x,'sm')}<div class="sp t">${esc(x.name)}</div>${balChip(balance(x.id))}<button class="btn s ok" onclick="payForm('${x.id}')">${ic('plus','sm')}Оплата</button></div>`).join('');
   h2+=`<div class="sect">Достижения · ${db.ach.length}/${ACH.length}</div><div class="ach">`+
     ACH.map(([id,icn,t,d])=>`<div class="${db.ach.includes(id)?'':'lock'}"><div class="ai">${ic(db.ach.includes(id)?icn:'lock','lg')}</div><b>${t}</b><span>${d}</span></div>`).join('')+`</div>`;
@@ -375,17 +386,177 @@ function vHome(){
 function lessonRow(l,late){
   const x=stu(l.student);
   return `<div class="li" style="--c:${x?.color}">${avatar(x,'sm')}<div class="sp"><div class="t">${esc(x?.name||'удалён')}</div>
-    <div class="mut">${late?l.date.split('-').reverse().slice(0,2).join('.')+' · ':''}${l.time} · ${l.dur} мин · ${money(l.price)}${l.subject?' · '+esc(l.subject):''}</div></div>
-    ${l.status==='planned'?`<button class="btn s ok" onclick="setSt('${l.id}','done')">${ic('check','sm')}Проведено</button>`:`<span class="chip ${l.status==='done'?'ok':l.status==='missed'?'bad':''}">${ST[l.status]}</span>`}
-    <button class="btn g s" onclick="lessonForm('${l.id}')">${ic('edit','sm')}</button></div>`;
+    <div class="mut">${late?fmtDM(l.date)+' · ':''}${l.time} · ${l.dur} мин · ${money(l.price)}${l.subject?' · '+esc(l.subject):''}${l.moved?' · перенесено':''}</div></div>
+    ${l.status==='planned'?`<button class="btn s ok" onclick="setSt('${l.id}','done')">${ic('check','sm')}Проведено</button>`:`<span class="chip ${l.status==='done'?'ok':l.status==='missed'?'bad':'warn'}">${ST[l.status]}</span>`}
+    <button class="btn g s" onclick="lessonPop('${l.id}')" title="Действия">${ic('move','sm')}</button></div>`;
+}
+function eventRow(e){
+  return `<div class="li" style="--c:${e.color}"><div class="avatar sm" style="--c:${e.color}">${ic('cal','sm')}</div><div class="sp"><div class="t">${esc(e.title)}</div>
+    <div class="mut">${e.allDay?'Весь день':e.time+' · '+e.dur+' мин'}${e.note?' · '+esc(e.note):''}</div></div>
+    <button class="btn g s" onclick="eventForm('${e.id}')">${ic('edit','sm')}</button></div>`;
 }
 function setSt(id,st){
   const l=db.lessons.find(x=>x.id===id);l.status=st;save();
+  if(dlg.open)dlg.close();
   if(st==='done'){confetti(40);toast('zap','+20 XP','Занятие проведено')}
+  else if(st==='cancelled')toast('x','Бесплатный пропуск','Оплата не списывается');
   render();
 }
 
 // ================= календарь =================
+const DOW=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+const dFromK=k=>new Date(k+'T00:00');
+const dowOf=k=>(dFromK(k).getDay()+6)%7;
+const fmtDate=k=>dFromK(k).toLocaleDateString('ru-RU',{weekday:'long',day:'numeric',month:'long'});
+const fmtDM=k=>k.split('-').reverse().slice(0,2).join('.');
+const hhmm=m=>String(Math.floor(m/60)%24).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
+const EVCOLORS=['#14b8a6','#22a6f2','#f59f00','#ef5b5b','#a45df0','#64748b'];
+
+// ---- повторения (как в Google Календаре) ----
+function genDates(startK,rule,limitK,maxN=400){
+  const out=[],st=dFromK(startK),end=rule.end||{type:'never'};
+  const hard=ymd(addDays(st,366*3));
+  let lim=limitK;
+  if(end.type==='count')lim=hard;
+  else if(end.type==='until'&&end.until)lim=end.until<hard?end.until:hard;
+  const maxCount=end.type==='count'?Math.max(1,+end.count||1):maxN;
+  const days=rule.days&&rule.days.length?rule.days:[dowOf(startK)],m0=mondayOf(st),iv=Math.max(1,+rule.interval||1);
+  for(let d=new Date(st);ymd(d)<=lim&&out.length<maxCount;d=addDays(d,1)){
+    let ok=false;
+    if(rule.freq==='daily')ok=Math.round((d-st)/864e5)%iv===0;
+    else if(rule.freq==='weekly'){const wk=Math.round((mondayOf(d)-m0)/6048e5);ok=wk%iv===0&&days.includes((d.getDay()+6)%7)}
+    else{const mo=(d.getFullYear()-st.getFullYear())*12+d.getMonth()-st.getMonth();
+      const want=Math.min(st.getDate(),new Date(d.getFullYear(),d.getMonth()+1,0).getDate());ok=mo%iv===0&&d.getDate()===want}
+    if(ok)out.push(ymd(d));
+  }
+  return out;
+}
+const horizon=()=>ymd(addDays(new Date(),183));
+// бесконечные серии дописываем на ~6 месяцев вперёд
+function extendSeries(){
+  const lim=horizon();let ch=false;
+  for(const[sid,sr]of Object.entries(db.series||{})){
+    if(!sr.rule||sr.rule.end?.type!=='never'||!sr.genUntil||sr.genUntil>=lim)continue;
+    const arr=sr.kind==='e'?db.events:db.lessons;
+    const tpl=arr.filter(x=>x.series===sid).sort((a,b)=>b.date.localeCompare(a.date))[0];
+    if(!tpl){delete db.series[sid];ch=true;continue}
+    if(sr.kind==='l'&&!stu(tpl.student))continue;
+    genDates(sr.start,sr.rule,lim).filter(d=>d>sr.genUntil).forEach(d=>{
+      const n={...tpl,id:uid(),date:d,time:tpl.moved?tpl.moved.time:tpl.time};
+      delete n.moved;delete n.moves;if(sr.kind==='l')n.status='planned';arr.push(n)});
+    sr.genUntil=lim;ch=true;
+  }
+  return ch;
+}
+function ruleText(r){
+  if(!r)return'';let t;
+  const iv=r.interval||1;
+  if(r.freq==='daily')t=iv===1?'Каждый день':`Каждые ${iv} дн.`;
+  else if(r.freq==='weekly'){const d=(r.days||[]).map(i=>DOW[i]).join(', ');
+    t=(iv===1?'Каждую неделю':iv===2?'Раз в 2 недели':`Каждые ${iv} нед.`)+(d?` (${d})`:'')}
+  else t=iv===1?'Каждый месяц':`Каждые ${iv} мес.`;
+  const e=r.end||{};
+  if(e.type==='count')t+=`, ${e.count} раз`;else if(e.type==='until'&&e.until)t+=`, до ${fmtDM(e.until)}`;
+  return t;
+}
+const recurUI=date=>`<label>Повтор</label><select name="rep" onchange="recurTog()">
+  <option value="none">Не повторять</option><option value="daily">Каждый день</option>
+  <option value="weekly">Каждую неделю (${DOW[dowOf(date)]})</option><option value="biweekly">Раз в 2 недели (${DOW[dowOf(date)]})</option>
+  <option value="weekdays">По будням (Пн–Пт)</option><option value="monthly">Каждый месяц</option><option value="custom">Свой вариант…</option></select>
+  <div id="rc" style="display:none">
+   <div id="rcust" style="display:none"><div class="two"><div><label>Каждые</label><input type="number" name="cInt" min="1" max="30" value="1"></div>
+    <div><label>Единица</label><select name="cUnit" onchange="recurTog()"><option value="daily">дней</option><option value="weekly" selected>недель</option><option value="monthly">месяцев</option></select></div></div>
+    <div id="rdays"><label>Дни недели</label><div class="sw">${DOW.map((d,i)=>`<label><input type="checkbox" name="cd" value="${i}" ${i===dowOf(date)?'checked':''}><span>${d}</span></label>`).join('')}</div></div></div>
+   <label>Окончание</label><select name="endType" onchange="recurTog()"><option value="never">Никогда</option><option value="count">После N раз</option><option value="until">В дату</option></select>
+   <div id="rcount" style="display:none"><label>Сколько раз всего</label><input type="number" name="endCount" min="1" max="400" value="10"></div>
+   <div id="runtil" style="display:none"><label>Повторять до</label><input type="date" name="endUntil" value="${ymd(addDays(dFromK(date),90))}"></div>
+  </div>`;
+function recurTog(){
+  const f=$('#f'),on=f.rep.value!=='none',cu=f.rep.value==='custom',sh=(id,v)=>$(id).style.display=v?'':'none';
+  sh('#rc',on);sh('#rcust',cu);sh('#rdays',cu&&f.cUnit.value==='weekly');
+  sh('#rcount',on&&f.endType.value==='count');sh('#runtil',on&&f.endType.value==='until');
+}
+function readRule(fd,date){
+  const r=fd.get('rep');if(!r||r==='none')return null;
+  const dow=dowOf(date);let rule;
+  if(r==='daily')rule={freq:'daily',interval:1};
+  else if(r==='weekly')rule={freq:'weekly',interval:1,days:[dow]};
+  else if(r==='biweekly')rule={freq:'weekly',interval:2,days:[dow]};
+  else if(r==='weekdays')rule={freq:'weekly',interval:1,days:[0,1,2,3,4]};
+  else if(r==='monthly')rule={freq:'monthly',interval:1};
+  else{rule={freq:fd.get('cUnit'),interval:Math.max(1,+fd.get('cInt')||1)};
+    if(rule.freq==='weekly'){const ds=fd.getAll('cd').map(Number);if(!ds.includes(dow))ds.push(dow);rule.days=ds.sort()}}
+  rule.end={type:fd.get('endType')||'never',count:+fd.get('endCount')||1,until:fd.get('endUntil')||''};
+  if(rule.end.type==='until'&&!rule.end.until)rule.end={type:'never'};
+  return rule;
+}
+// создать серию (или одиночный элемент); arrName: 'lessons' | 'events'
+function createItems(arrName,kind,base,date,rule){
+  const arr=db[arrName];
+  if(!rule){arr.push({id:uid(),...base,date});return 1}
+  const lim=horizon(),dates=genDates(date,rule,lim),sid=uid();
+  db.series[sid]={kind,rule,start:date,time:base.time,genUntil:rule.end.type==='never'?lim:null};
+  dates.forEach(d=>arr.push({id:uid(),...base,date:d,series:sid}));
+  return dates.length;
+}
+const scopeRadios=(what='Применить к')=>`<label>${what}</label><div class="sw">
+  <label><input type="radio" name="scope" value="one" checked><span>Только это</span></label>
+  <label><input type="radio" name="scope" value="following"><span>Это и следующие</span></label>
+  <label><input type="radio" name="scope" value="all"><span>Вся серия</span></label></div>`;
+function askScope(title,okText,cb){
+  openDlg(`<h2>${title}</h2><form id="sf">${scopeRadios('Что затронуть')}
+   <div class="row" style="margin-top:18px"><span class="sp"></span><button type="button" class="btn g" onclick="dlg.close()">Отмена</button><button class="btn d" style="background:var(--bad);color:#fff">${okText}</button></div></form>`);
+  $('#sf').onsubmit=e=>{e.preventDefault();cb(new FormData(e.target).get('scope'))};
+}
+function scopeTargets(kind,it,scope){
+  const arr=kind==='e'?db.events:db.lessons;
+  if(!it.series||scope==='one')return[it];
+  return arr.filter(x=>x.series===it.series&&(scope==='all'||x.date>=it.date)&&(x===it||kind==='e'||!charged(x)));
+}
+function removeScoped(kind,id,scope){
+  const arr=kind==='e'?db.events:db.lessons,it=arr.find(x=>x.id===id);if(!it)return;
+  const ids=new Set(scopeTargets(kind,it,scope).map(x=>x.id));
+  if(kind==='e')db.events=db.events.filter(x=>!ids.has(x.id));else db.lessons=db.lessons.filter(x=>!ids.has(x.id));
+  const sr=it.series&&db.series[it.series];
+  if(sr){if(scope==='all')delete db.series[it.series];
+    else if(scope==='following'){sr.rule.end={type:'until',until:ymd(addDays(dFromK(it.date),-1))};sr.genUntil=null}}
+  save();dlg.close();render();
+}
+function delItem(kind,id){
+  const it=(kind==='e'?db.events:db.lessons).find(x=>x.id===id);
+  if(it.series)askScope(kind==='e'?'Удалить мероприятие':'Удалить занятие','Удалить',s=>removeScoped(kind,id,s));
+  else if(confirm('Удалить?'))removeScoped(kind,id,'one');
+}
+const delLesson=id=>delItem('l',id),delEvent=id=>delItem('e',id);
+
+// ---- перенос ----
+function moveItem(k,id,date,time){
+  const it=(k==='l'?db.lessons:db.events).find(x=>x.id===id);if(!it)return;
+  const nt=time??it.time;
+  if(it.date===date&&it.time===nt)return;
+  if(k==='l'){it.moved=it.moved||{date:it.date,time:it.time};it.moves=(it.moves||0)+1}
+  it.date=date;it.time=nt;save();
+  toast('cal',k==='l'?'Занятие перенесено':'Мероприятие перенесено',`${fmtDM(date)} в ${nt}`);render();
+}
+function moveForm(id){
+  const l=db.lessons.find(x=>x.id===id),s=stu(l.student);
+  openDlg(`<h2>Перенос занятия</h2><p class="mut">${esc(s?.name||'')} · сейчас ${fmtDM(l.date)} в ${l.time}. Оплата не списывается — занятие остаётся в плане.</p><form id="f">
+   <div class="two"><div><label>Новая дата</label><input type="date" name="date" value="${l.date}" required></div>
+   <div><label>Новое время</label><input type="time" name="time" value="${l.time}" step="900" required></div></div>${btns()}</form>`);
+  $('#f').onsubmit=e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.target));
+    if(l.status!=='planned')l.status='planned';moveItem('l',id,f.date,f.time);dlg.close()};
+}
+// ---- перетаскивание (мышью, как в Google Календаре) ----
+function dragS(e,k,id){e.dataTransfer.setData('text/plain',k+':'+id);e.dataTransfer.effectAllowed='move';window.__dy=e.offsetY||0}
+function dropEv(e,date,H0,HH){
+  e.preventDefault();const[k,id]=e.dataTransfer.getData('text/plain').split(':');if(!id)return;
+  const y=e.clientY-e.currentTarget.getBoundingClientRect().top-(window.__dy||0);
+  let m=H0*60+Math.round(y/HH*4)*15;m=Math.max(0,Math.min(m,23*60+45));
+  moveItem(k,id,date,hhmm(m));
+}
+function dropDay(e,date){e.preventDefault();e.stopPropagation();const[k,id]=e.dataTransfer.getData('text/plain').split(':');if(id)moveItem(k,id,date)}
+
+// ---- отображение ----
 function calNav(n){
   if(calMode==='week')calDate=addDays(calDate,7*n);else{calDate=new Date(calDate.getFullYear(),calDate.getMonth()+n,1)}
   render()}
@@ -394,18 +565,21 @@ function vCal(){
   let title,body;
   if(calMode==='week'){
     const st=mondayOf(calDate),days=[...Array(7)].map((_,i)=>addDays(st,i)),ds=days.map(ymd);
-    const ls=db.lessons.filter(l=>ds.includes(l.date));
+    const ls=db.lessons.filter(l=>ds.includes(l.date)),es=db.events.filter(e=>ds.includes(e.date)),timed=es.filter(e=>!e.allDay),allday=es.filter(e=>e.allDay);
     let H0=8,H1=22;
-    for(const l of ls){H0=Math.min(H0,Math.floor(toMin(l.time)/60));H1=Math.max(H1,Math.ceil((toMin(l.time)+l.dur)/60))}
-    const HH=54,n=H1-H0;
-    const a=days[0],b=days[6];
+    for(const l of [...ls,...timed]){H0=Math.min(H0,Math.floor(toMin(l.time)/60));H1=Math.max(H1,Math.min(24,Math.ceil((toMin(l.time)+l.dur)/60)))}
+    const HH=54,n=H1-H0,a=days[0],b=days[6];
     title=a.getMonth()===b.getMonth()?`${a.getDate()}–${b.getDate()} ${b.toLocaleDateString('ru-RU',{month:'long',year:'numeric'})}`:`${a.toLocaleDateString('ru-RU',{day:'numeric',month:'short'})} – ${b.toLocaleDateString('ru-RU',{day:'numeric',month:'short'})}`;
     const nowM=new Date().getHours()*60+new Date().getMinutes();
+    const blk=(x,k)=>{const top=(toMin(x.time)-H0*60)/60*HH,h=Math.max(24,x.dur/60*HH-2);
+      if(k==='e')return `<div class="ev evt" draggable="true" ondragstart="dragS(event,'e','${x.id}')" style="--c:${x.color};top:${top}px;height:${h}px" onclick="event.stopPropagation();eventForm('${x.id}')"><b>${x.time} ${esc(x.title)}</b>${h>40?`<span>${x.dur} мин</span>`:''}${x.series?ic('repeat','ck'):''}</div>`;
+      const s=stu(x.student);
+      return `<div class="ev ${x.status}" draggable="true" ondragstart="dragS(event,'l','${x.id}')" style="--c:${s?.color};top:${top}px;height:${h}px" onclick="event.stopPropagation();lessonPop('${x.id}')"><b>${x.time} ${esc(s?.name||'')}</b>${h>40?`<span style="opacity:.75">${x.dur} мин${x.subject?' · '+esc(x.subject):''}</span>`:''}${x.status==='done'?ic('check','ck'):x.series?ic('repeat','ck'):''}</div>`};
     body=`<div class="scroll"><div class="wk"><div class="wk-h"><div></div>${days.map((d,i)=>`<div class="${ds[i]===t?'today':''}">${d.toLocaleDateString('ru-RU',{weekday:'short'})}<b>${d.getDate()}</b></div>`).join('')}</div>
+    ${allday.length?`<div class="wk-ad"><div class="gut"></div>${ds.map(d=>`<div>${allday.filter(e=>e.date===d).map(e=>`<span class="adc" style="--c:${e.color}" onclick="eventForm('${e.id}')">${esc(e.title)}</span>`).join('')}</div>`).join('')}</div>`:''}
     <div class="wk-b" style="height:${n*HH}px;--hh:${HH}px"><div class="gut">${[...Array(n)].map((_,i)=>`<span style="top:${i*HH}px;${i?'':'display:none'}">${String(H0+i).padStart(2,'0')}:00</span>`).join('')}</div>
-    ${ds.map(d=>`<div class="col ${d===t?'today':''}" onclick="slotClick(event,'${d}',${H0},${HH})">
-      ${ls.filter(l=>l.date===d).map(l=>{const x=stu(l.student),top=(toMin(l.time)-H0*60)/60*HH,h=Math.max(24,l.dur/60*HH-2);
-        return `<div class="ev ${l.status}" style="--c:${x?.color};top:${top}px;height:${h}px" onclick="event.stopPropagation();lessonForm('${l.id}')"><b>${l.time} ${esc(x?.name||'')}</b>${h>40?`<span class="mut" style="color:inherit;opacity:.75">${l.dur} мин${l.subject?' · '+esc(l.subject):''}</span>`:''}${l.status==='done'?ic('check','ck'):''}</div>`}).join('')}
+    ${ds.map(d=>`<div class="col ${d===t?'today':''}" onclick="slotClick(event,'${d}',${H0},${HH})" ondragover="event.preventDefault()" ondrop="dropEv(event,'${d}',${H0},${HH})">
+      ${ls.filter(l=>l.date===d).map(l=>blk(l,'l')).join('')}${timed.filter(e=>e.date===d).map(e=>blk(e,'e')).join('')}
       ${d===t&&nowM>=H0*60&&nowM<=H1*60?`<div class="now" style="top:${(nowM-H0*60)/60*HH}px"></div>`:''}</div>`).join('')}</div></div></div>`;
   }else{
     const y=calDate.getFullYear(),m=calDate.getMonth();
@@ -414,30 +588,55 @@ function vCal(){
     const weeks=Math.ceil(((last-first)/864e5+1)/7);
     let cells='';
     for(let i=0;i<weeks*7;i++){
-      const d=addDays(first,i),k=ymd(d),ls=db.lessons.filter(l=>l.date===k).sort((a,b)=>a.time.localeCompare(b.time));
-      cells+=`<div class="d ${d.getMonth()!==m?'out':''} ${k===t?'today':''}" onclick="lessonForm(null,{date:'${k}'})"><span class="n">${d.getDate()}</span>
-      ${ls.slice(0,3).map(l=>{const x=stu(l.student);return `<div class="c ${l.status}" style="--c:${x?.color}" onclick="event.stopPropagation();lessonForm('${l.id}')"><span>${l.time} ${esc(x?.name.split(' ')[0]||'')}</span></div>`}).join('')}
-      ${ls.length>3?`<div class="more">ещё ${ls.length-3}</div>`:''}</div>`}
-    body=`<div class="scroll"><div class="mo">${['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map(d=>`<div class="dh">${d}</div>`).join('')}${cells}</div></div>`;
+      const d=addDays(first,i),k=ymd(d);
+      const items=[...db.events.filter(e=>e.date===k).sort((a,b)=>(b.allDay?1:0)-(a.allDay?1:0)||a.time.localeCompare(b.time)).map(e=>({e,time:e.allDay?'00:00':e.time})),
+                   ...db.lessons.filter(l=>l.date===k).map(l=>({l,time:l.time}))].sort((a,b)=>a.time.localeCompare(b.time));
+      cells+=`<div class="d ${d.getMonth()!==m?'out':''} ${k===t?'today':''}" onclick="lessonForm(null,{date:'${k}'})" ondragover="event.preventDefault()" ondrop="dropDay(event,'${k}')"><span class="n">${d.getDate()}</span>
+      ${items.slice(0,3).map(it=>it.e?`<div class="c evt" draggable="true" ondragstart="dragS(event,'e','${it.e.id}')" style="--c:${it.e.color}" onclick="event.stopPropagation();eventForm('${it.e.id}')"><span>${it.e.allDay?'':it.e.time+' '}${esc(it.e.title)}</span></div>`
+        :`<div class="c ${it.l.status}" draggable="true" ondragstart="dragS(event,'l','${it.l.id}')" style="--c:${stu(it.l.student)?.color}" onclick="event.stopPropagation();lessonPop('${it.l.id}')"><span>${it.l.time} ${esc(stu(it.l.student)?.name.split(' ')[0]||'')}</span></div>`).join('')}
+      ${items.length>3?`<div class="more">ещё ${items.length-3}</div>`:''}</div>`}
+    body=`<div class="scroll"><div class="mo">${DOW.map(d=>`<div class="dh">${d}</div>`).join('')}${cells}</div></div>`;
   }
   return `<div class="calbar"><button class="iconbtn" onclick="calNav(-1)">${ic('l')}</button><button class="iconbtn" onclick="calNav(1)">${ic('r')}</button>
     <div class="ttl">${title}</div><span class="sp"></span>
     <button class="btn g s" onclick="calDate=new Date();render()">Сегодня</button>
     <div class="seg"><button class="${calMode==='week'?'on':''}" onclick="calMode='week';render()">Неделя</button><button class="${calMode==='month'?'on':''}" onclick="calMode='month';render()">Месяц</button></div>
-    <button class="btn" onclick="lessonForm()">${ic('plus','sm')}Занятие</button></div>${body}
-    <p class="mut" style="text-align:center;margin-top:10px">Нажмите на свободное место в календаре, чтобы назначить занятие</p>`;
+    <button class="btn" onclick="lessonForm()">${ic('plus','sm')}Занятие</button><button class="btn g" onclick="eventForm()">${ic('plus','sm')}Мероприятие</button></div>${body}
+    <p class="mut" style="text-align:center;margin-top:10px">Нажмите на свободное место, чтобы назначить занятие. Занятия и мероприятия можно перетаскивать мышью.</p>`;
 }
 function slotClick(e,date,H0,HH){
   const y=e.clientY-e.currentTarget.getBoundingClientRect().top;
-  const m=H0*60+Math.floor(y/HH*2)*30;
-  lessonForm(null,{date,time:String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0')});
+  lessonForm(null,{date,time:hhmm(H0*60+Math.floor(y/HH*2)*30)});
 }
 
+// ---- карточка занятия и действия ----
+function lessonPop(id){
+  const l=db.lessons.find(x=>x.id===id);if(!l)return;const s=stu(l.student);
+  const cls=l.status==='done'?'ok':l.status==='missed'?'bad':l.status==='cancelled'?'warn':'pri';
+  openDlg(`<div class="row" style="flex-wrap:nowrap">${avatar(s)}<div class="sp"><h2 style="font-size:18px">${esc(s?.name||'удалён')}</h2>
+    <div class="mut">${fmtDate(l.date)} · ${l.time}–${hhmm(toMin(l.time)+l.dur)}</div></div></div>
+   <div class="row" style="margin:14px 0 6px"><span class="chip ${cls}">${ST[l.status]}</span><span class="chip">${money(l.price)}</span>
+    ${l.series?`<span class="chip pri">${ic('repeat','sm')}${esc(ruleText(db.series[l.series]?.rule))}</span>`:''}
+    ${l.moved?`<span class="chip warn">${ic('move','sm')}перенесено с ${fmtDM(l.moved.date)} ${l.moved.time}</span>`:''}</div>
+   ${l.subject||l.note?`<div class="mut">${esc([l.subject,l.note].filter(Boolean).join(' · '))}</div>`:''}
+   <div class="acts">
+    ${l.status==='planned'?`<button class="btn ok" onclick="setSt('${id}','done')">${ic('check','sm')}Проведено</button>`:`<button class="btn g" onclick="setSt('${id}','planned')">${ic('clock','sm')}Вернуть в план</button>`}
+    <button class="btn g" onclick="moveForm('${id}')">${ic('move','sm')}Перенести</button>
+    <button class="btn g" onclick="setSt('${id}','cancelled')">${ic('x','sm')}Бесплатный пропуск</button>
+    <button class="btn g" onclick="setSt('${id}','missed')">${ic('alert','sm')}Платный пропуск</button>
+    <button class="btn g" onclick="lessonForm('${id}')">${ic('edit','sm')}Изменить</button>
+    <button class="btn g" onclick="dlg.close()">Закрыть</button></div>
+   <p class="mut" style="margin:10px 0 0">Бесплатный пропуск не списывается с баланса. Платный пропуск списывается как проведённое занятие.</p>`);
+}
+
+// ---- форма занятия ----
+const typeSeg=cur=>`<div class="seg" style="margin-bottom:6px;width:fit-content"><button type="button" class="${cur==='l'?'on':''}" onclick="swType('l')">Занятие</button><button type="button" class="${cur==='e'?'on':''}" onclick="swType('e')">Мероприятие</button></div>`;
+function swType(k){const f=$('#f'),p={date:f.date.value,time:f.time.value};k==='e'?eventForm(null,p):lessonForm(null,p)}
 function lessonForm(id,pre={}){
-  if(!db.students.length){toast('users','Сначала добавьте ученика');view='students';render();return}
+  if(!db.students.length){toast('users','Сначала добавьте ученика');view='students';dlg.open&&dlg.close();render();return}
   const f0=db.students.find(s=>s.id===pre.student)||db.students[0];
   const l=db.lessons.find(x=>x.id===id)||{student:f0.id,date:pre.date||today(),time:pre.time||'16:00',dur:f0.dur||60,price:f0.rate||0,subject:'',note:'',status:'planned'};
-  openDlg(`<h2>${id?'Занятие':'Новое занятие'}</h2><form id="f">
+  openDlg(`<h2>${id?'Занятие':'Новое занятие'}</h2><form id="f">${id?'':typeSeg('l')}
    <label>Ученик</label><select name="student" onchange="const s=stu(this.value);this.form.price.value=s.rate||0;this.form.dur.value=s.dur||60">
      ${db.students.map(s=>`<option value="${s.id}" ${s.id===l.student?'selected':''}>${esc(s.name)}</option>`).join('')}</select>
    <div class="two"><div><label>Дата</label><input type="date" name="date" value="${l.date}" required></div>
@@ -446,21 +645,51 @@ function lessonForm(id,pre={}){
    <div><label>Стоимость, ₸</label><input type="number" name="price" min="0" value="${l.price}" required></div></div>
    <label>Тема / предмет</label><input name="subject" value="${esc(l.subject)}" placeholder="Например: Алгебра, дроби">
    <label>Заметка</label><input name="note" value="${esc(l.note)}">
-   ${id?`<label>Статус</label><div class="sw">${Object.entries(ST).map(([k,v])=>`<label><input type="radio" name="status" value="${k}" ${l.status===k?'checked':''}><span>${v}</span></label>`).join('')}</div>`
-      :`<label>Повторять еженедельно (всего занятий)</label><input type="number" name="rep" min="1" max="52" value="1">`}
+   ${id?`<label>Статус</label><div class="sw">${Object.entries(ST).map(([k,v])=>`<label><input type="radio" name="status" value="${k}" ${l.status===k?'checked':''}><span>${v}</span></label>`).join('')}</div>
+      ${l.series?`<p class="mut" style="margin:10px 0 0">${ic('repeat','sm')} ${esc(ruleText(db.series[l.series]?.rule))}</p>${scopeRadios('Применить изменения к')}`:''}`
+      :recurUI(l.date)}
    ${btns(id?`delLesson('${id}')`:'')}</form>`);
-  $('#f').onsubmit=e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.target));
+  $('#f').onsubmit=e=>{e.preventDefault();const fd=new FormData(e.target),f=Object.fromEntries(fd);
     const base={student:f.student,time:f.time,dur:+f.dur,price:+f.price,subject:f.subject.trim(),note:f.note.trim()};
-    const dates=[];const n=id?1:Math.max(1,+f.rep||1);
-    for(let i=0;i<n;i++)dates.push(ymd(addDays(new Date(f.date+'T00:00'),7*i)));
-    const clash=dates.some(d=>db.lessons.some(o=>o.id!==id&&o.date===d&&o.status!=='cancelled'&&toMin(o.time)<toMin(base.time)+base.dur&&toMin(base.time)<toMin(o.time)+o.dur));
+    const rule=id?null:readRule(fd,f.date);
+    const dates=id?[f.date]:rule?genDates(f.date,rule,horizon()):[f.date];
+    const clash=dates.slice(0,60).some(d=>db.lessons.some(o=>o.id!==id&&o.date===d&&o.status!=='cancelled'&&toMin(o.time)<toMin(base.time)+base.dur&&toMin(base.time)<toMin(o.time)+o.dur));
     if(clash&&!confirm('Это время пересекается с другим занятием. Всё равно сохранить?'))return;
-    const wasDone=l.status==='done';
-    if(id){Object.assign(l,base,{date:f.date,status:f.status||l.status});if(!wasDone&&l.status==='done'){confetti(40);toast('zap','+20 XP','Занятие проведено')}}
-    else dates.forEach(d=>db.lessons.push({id:uid(),...base,date:d,status:'planned'}));
-    save();dlg.close();if(!id)toast('cal',n>1?`Назначено занятий: ${n}`:'Занятие назначено');render()};
+    if(id){
+      const scope=f.scope||'one',wasDone=l.status==='done',delta=Math.round((dFromK(f.date)-dFromK(l.date))/864e5);
+      if((l.date!==f.date||l.time!==f.time)&&l.status==='planned'&&!l.moved)l.moved={date:l.date,time:l.time};
+      scopeTargets('l',l,scope).forEach(x=>{Object.assign(x,base);
+        if(x===l){x.date=f.date;x.status=f.status||x.status}else if(delta)x.date=ymd(addDays(dFromK(x.date),delta))});
+      if(l.series&&scope==='all'&&delta&&db.series[l.series])db.series[l.series].start=ymd(addDays(dFromK(db.series[l.series].start),delta));
+      if(!wasDone&&l.status==='done'){confetti(40);toast('zap','+20 XP','Занятие проведено')}
+    }else{const n=createItems('lessons','l',{...base,status:'planned'},f.date,rule);
+      toast('cal',n>1?`Назначено занятий: ${n}`:'Занятие назначено')}
+    save();dlg.close();render()};
 }
-function delLesson(id){if(confirm('Удалить занятие?')){db.lessons=db.lessons.filter(l=>l.id!==id);save();dlg.close();render()}}
+
+// ---- мероприятия ----
+function eventForm(id,pre={}){
+  const e0=db.events.find(x=>x.id===id)||{title:'',date:pre.date||today(),time:pre.time||'12:00',dur:60,allDay:false,color:EVCOLORS[0],note:''};
+  openDlg(`<h2>${id?'Мероприятие':'Новое мероприятие'}</h2><form id="f">${id?'':typeSeg('e')}
+   <label>Название</label><input name="title" value="${esc(e0.title)}" placeholder="Например: Обед, Педсовет, Отпуск" required>
+   <div class="two"><div><label>Дата</label><input type="date" name="date" value="${e0.date}" required></div>
+   <div><label>Время</label><input type="time" name="time" value="${e0.time}" step="900" ${e0.allDay?'disabled':''} required></div></div>
+   <div class="two"><div><label>Длительность, мин</label><input type="number" name="dur" min="5" step="5" value="${e0.dur}" ${e0.allDay?'disabled':''}></div>
+   <div><label>&nbsp;</label><label style="display:flex;gap:8px;align-items:center;margin:0;padding:11px 0;color:var(--tx);font-size:14px"><input type="checkbox" name="allDay" style="width:auto" ${e0.allDay?'checked':''} onchange="this.form.time.disabled=this.form.dur.disabled=this.checked">Весь день</label></div></div>
+   <label>Цвет</label><div class="sw">${EVCOLORS.map(c=>`<label><input type="radio" name="color" value="${c}" ${c===e0.color?'checked':''}><span style="background:${c};width:34px;height:30px;border-color:transparent"></span></label>`).join('')}</div>
+   <label>Заметка</label><input name="note" value="${esc(e0.note)}">
+   ${id?(e0.series?`<p class="mut" style="margin:10px 0 0">${ic('repeat','sm')} ${esc(ruleText(db.series[e0.series]?.rule))}</p>${scopeRadios('Применить изменения к')}`:''):recurUI(e0.date)}
+   ${btns(id?`delEvent('${id}')`:'')}</form>`);
+  $('#f').onsubmit=ev=>{ev.preventDefault();const fd=new FormData(ev.target),f=Object.fromEntries(fd);
+    const all=!!f.allDay;
+    const base={title:f.title.trim(),time:all?'00:00':f.time,dur:all?1440:(+f.dur||60),allDay:all,color:f.color,note:f.note.trim()};
+    if(id){
+      const scope=f.scope||'one',delta=Math.round((dFromK(f.date)-dFromK(e0.date))/864e5);
+      scopeTargets('e',e0,scope).forEach(x=>{Object.assign(x,base);if(x===e0)x.date=f.date;else if(delta)x.date=ymd(addDays(dFromK(x.date),delta))});
+      if(e0.series&&scope==='all'&&delta&&db.series[e0.series])db.series[e0.series].start=ymd(addDays(dFromK(db.series[e0.series].start),delta));
+    }else{const n=createItems('events','e',base,f.date,readRule(fd,f.date));toast('cal',n>1?`Создано мероприятий: ${n}`:'Мероприятие добавлено')}
+    save();dlg.close();render()};
+}
 
 // ================= ученики =================
 function vStudents(){
